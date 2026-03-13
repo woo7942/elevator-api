@@ -838,7 +838,7 @@ app.delete('/api/elevators/:id', wrap((req, res) => {
 // ── 검사(Inspections) ─────────────────────────────────────────
 app.get('/api/inspections', wrap((req, res) => {
   const { site_id, elevator_id, result, inspection_type } = req.query;
-  let sql = `SELECT i.*, s.site_name, e.elevator_name, e.elevator_no FROM inspections i LEFT JOIN sites s ON s.id=i.site_id LEFT JOIN elevators e ON e.id=i.elevator_id`;
+  let sql = `SELECT i.*, s.site_name, s.team, e.elevator_name, e.elevator_no FROM inspections i LEFT JOIN sites s ON s.id=i.site_id LEFT JOIN elevators e ON e.id=i.elevator_id`;
   const params = [];
   const where = [];
   if (site_id) { where.push('i.site_id=?'); params.push(site_id); }
@@ -851,7 +851,7 @@ app.get('/api/inspections', wrap((req, res) => {
 }));
 
 app.get('/api/inspections/:id', wrap((req, res) => {
-  const item = db.prepare('SELECT i.*, s.site_name, e.elevator_name FROM inspections i LEFT JOIN sites s ON s.id=i.site_id LEFT JOIN elevators e ON e.id=i.elevator_id WHERE i.id=?').get(req.params.id);
+  const item = db.prepare('SELECT i.*, s.site_name, s.team, e.elevator_name FROM inspections i LEFT JOIN sites s ON s.id=i.site_id LEFT JOIN elevators e ON e.id=i.elevator_id WHERE i.id=?').get(req.params.id);
   if (!item) return res.status(404).json({ success: false, error: '검사를 찾을 수 없습니다' });
   res.json({ success: true, result: item });
 }));
@@ -878,7 +878,7 @@ app.delete('/api/inspections/:id', wrap((req, res) => {
 // ── 지적사항(Issues) ──────────────────────────────────────────
 app.get('/api/issues', wrap((req, res) => {
   const { site_id, elevator_id, status, severity, inspection_id } = req.query;
-  let sql = `SELECT ii.*, s.site_name, e.elevator_name FROM inspection_issues ii LEFT JOIN sites s ON s.id=ii.site_id LEFT JOIN elevators e ON e.id=ii.elevator_id`;
+  let sql = `SELECT ii.*, s.site_name, s.team, e.elevator_name FROM inspection_issues ii LEFT JOIN sites s ON s.id=ii.site_id LEFT JOIN elevators e ON e.id=ii.elevator_id`;
   const params = [];
   const where = [];
   if (site_id) { where.push('ii.site_id=?'); params.push(site_id); }
@@ -892,7 +892,7 @@ app.get('/api/issues', wrap((req, res) => {
 }));
 
 app.get('/api/issues/:id', wrap((req, res) => {
-  const item = db.prepare('SELECT ii.*, s.site_name, e.elevator_name FROM inspection_issues ii LEFT JOIN sites s ON s.id=ii.site_id LEFT JOIN elevators e ON e.id=ii.elevator_id WHERE ii.id=?').get(req.params.id);
+  const item = db.prepare('SELECT ii.*, s.site_name, s.team, e.elevator_name FROM inspection_issues ii LEFT JOIN sites s ON s.id=ii.site_id LEFT JOIN elevators e ON e.id=ii.elevator_id WHERE ii.id=?').get(req.params.id);
   if (!item) return res.status(404).json({ success: false, error: '지적사항을 찾을 수 없습니다' });
   res.json({ success: true, result: item });
 }));
@@ -1082,7 +1082,7 @@ app.delete('/api/monthly/:id', wrap((req, res) => {
 // ── 분기 점검(Quarterly) ──────────────────────────────────────
 app.get('/api/quarterly', wrap((req, res) => {
   const { site_id, elevator_id, check_year, quarter, status } = req.query;
-  let sql = `SELECT qc.*, s.site_name, e.elevator_name FROM quarterly_checks qc LEFT JOIN sites s ON s.id=qc.site_id LEFT JOIN elevators e ON e.id=qc.elevator_id`;
+  let sql = `SELECT qc.*, s.site_name, s.team, e.elevator_name FROM quarterly_checks qc LEFT JOIN sites s ON s.id=qc.site_id LEFT JOIN elevators e ON e.id=qc.elevator_id`;
   const params = [];
   const where = [];
   if (site_id) { where.push('qc.site_id=?'); params.push(site_id); }
@@ -1096,7 +1096,7 @@ app.get('/api/quarterly', wrap((req, res) => {
 }));
 
 app.get('/api/quarterly/:id', wrap((req, res) => {
-  const item = db.prepare('SELECT qc.*, s.site_name, e.elevator_name FROM quarterly_checks qc LEFT JOIN sites s ON s.id=qc.site_id LEFT JOIN elevators e ON e.id=qc.elevator_id WHERE qc.id=?').get(req.params.id);
+  const item = db.prepare('SELECT qc.*, s.site_name, s.team, e.elevator_name FROM quarterly_checks qc LEFT JOIN sites s ON s.id=qc.site_id LEFT JOIN elevators e ON e.id=qc.elevator_id WHERE qc.id=?').get(req.params.id);
   if (!item) return res.status(404).json({ success: false, error: '분기 점검을 찾을 수 없습니다' });
   res.json({ success: true, result: item });
 }));
