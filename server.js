@@ -524,7 +524,7 @@ app.get('/api/dashboard', wrap((req, res) => {
           (SELECT SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) FROM elevators) as fault
         FROM sites WHERE status='active'
       `).get();
-  const pendingIssues = teamFilter
+  const pendingIssuesRaw = teamFilter
     ? db.prepare(`
         SELECT COUNT(*) as total,
         SUM(CASE WHEN ii.severity='중결함' THEN 1 ELSE 0 END) as critical,
@@ -538,6 +538,12 @@ app.get('/api/dashboard', wrap((req, res) => {
     SUM(CASE WHEN severity='경결함' THEN 1 ELSE 0 END) as minor
     FROM inspection_issues WHERE status != '조치완료'
   `).get();
+  // null 방지: SUM이 row 없을 때 null 반환하므로 0으로 보정
+  const pendingIssues = {
+    total: pendingIssuesRaw?.total || 0,
+    critical: pendingIssuesRaw?.critical || 0,
+    minor: pendingIssuesRaw?.minor || 0,
+  };
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -1476,46 +1482,58 @@ const PAJU1_SEED_DATA = [
 
 function autoRestorePaju1Team() {
   try {
+    // 1단계: team=NULL 현장을 파주1팀으로 업데이트 (중복 삽입 방지)
+    const nullCount = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team IS NULL").get();
+    if (nullCount.cnt > 0) {
+      db.prepare("UPDATE sites SET team='파주1팀' WHERE team IS NULL").run();
+      console.log(`✅ team=NULL ${nullCount.cnt}개 → 파주1팀 업데이트 완료`);
+    }
+
+    // 2단계: 파주1팀 중복 제거 (같은 이름 중 id 큰 것 삭제)
+    const dupRows = db.prepare(`
+      SELECT id FROM sites
+      WHERE team = '파주1팀' AND id NOT IN (
+        SELECT MIN(id) FROM sites WHERE team = '파주1팀' GROUP BY site_name
+      )
+    `).all();
+    if (dupRows.length > 0) {
+      const delStmt = db.prepare('DELETE FROM sites WHERE id = ?');
+      const delMany = db.transaction((rows) => rows.forEach(r => delStmt.run(r.id)));
+      delMany(dupRows);
+      console.log(`✅ 파주1팀 중복 ${dupRows.length}개 제거`);
+    }
+
+    // 3단계: 여전히 부족하면 시드 데이터로 삽입
     const count = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team = '파주1팀'").get();
     if (count.cnt >= 100) {
-      console.log(`✅ 파주1팀 데이터 확인: ${count.cnt}개 (복구 불필요)`);
+      console.log(`✅ 파주1팀 데이터 확인: ${count.cnt}개`);
       return;
     }
-    console.log(`⚠️  파주1팀 데이터 부족 (현재 ${count.cnt}개) → 자동 복구 시작...`);
+    console.log(`⚠️  파주1팀 데이터 부족 (현재 ${count.cnt}개) → 시드 삽입...`);
 
-    db.prepare("DELETE FROM sites WHERE team = '파주1팀'").run();
-
+    const existingNames = new Set(
+      db.prepare("SELECT site_name FROM sites WHERE team='파주1팀'").all().map(r => r.site_name)
+    );
     const insert = db.prepare(`
-      INSERT OR IGNORE INTO sites
+      INSERT INTO sites
         (site_code, site_name, address, owner_name, owner_phone, manager_name,
          total_elevators, status, contract_start, contract_end, notes, team)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, '파주1팀')
     `);
-
-    const insertMany = db.transaction((sites) => {
+    const insertMany = db.transaction((seeds) => {
       let success = 0;
-      for (const s of sites) {
+      for (const s of seeds) {
+        if (existingNames.has(s.name)) continue;
         const code = 'P1-' + Date.now().toString(36).toUpperCase() + '-' +
                      Math.random().toString(36).slice(2, 5).toUpperCase();
-        insert.run(
-          code,
-          s.name,
-          s.address || '',
-          s.owner || '',
-          s.phone || '',
-          s.manager || '',
-          s.elevators || 0,
-          s.contract_start || null,
-          s.contract_end || null,
-          s.notes || ''
-        );
+        insert.run(code, s.name, s.address||'', s.owner||'', s.phone||'', s.manager||'',
+          s.elevators||0, s.contract_start||null, s.contract_end||null, s.notes||'');
         success++;
       }
       return success;
     });
-
     const inserted = insertMany(PAJU1_SEED_DATA);
-    console.log(`✅ 파주1팀 자동 복구 완료: ${inserted}개 삽입`);
+    console.log(`✅ 파주1팀 시드 삽입: ${inserted}개`);
   } catch (err) {
     console.error('❌ 파주1팀 자동 복구 실패:', err.message);
   }
@@ -1523,46 +1541,50 @@ function autoRestorePaju1Team() {
 
 function autoRestorePaju2Team() {
   try {
+    // 중복 제거 먼저
+    const dupRows = db.prepare(`
+      SELECT id FROM sites
+      WHERE team = '파주2팀' AND id NOT IN (
+        SELECT MIN(id) FROM sites WHERE team = '파주2팀' GROUP BY site_name
+      )
+    `).all();
+    if (dupRows.length > 0) {
+      const delStmt = db.prepare('DELETE FROM sites WHERE id = ?');
+      const delMany = db.transaction((rows) => rows.forEach(r => delStmt.run(r.id)));
+      delMany(dupRows);
+      console.log(`✅ 파주2팀 중복 ${dupRows.length}개 제거`);
+    }
+
     const count = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team = '파주2팀'").get();
     if (count.cnt >= 50) {
-      console.log(`✅ 파주2팀 데이터 확인: ${count.cnt}개 (복구 불필요)`);
+      console.log(`✅ 파주2팀 데이터 확인: ${count.cnt}개`);
       return;
     }
-    console.log(`⚠️  파주2팀 데이터 부족 (현재 ${count.cnt}개) → 자동 복구 시작...`);
+    console.log(`⚠️  파주2팀 데이터 부족 (현재 ${count.cnt}개) → 시드 삽입...`);
 
-    // 기존 파주2팀 레코드 모두 삭제 후 재삽입 (깔끔하게)
-    db.prepare("DELETE FROM sites WHERE team = '파주2팀'").run();
-
+    const existingNames = new Set(
+      db.prepare("SELECT site_name FROM sites WHERE team='파주2팀'").all().map(r => r.site_name)
+    );
     const insert = db.prepare(`
-      INSERT OR IGNORE INTO sites
+      INSERT INTO sites
         (site_code, site_name, address, owner_name, owner_phone,
          total_elevators, status, contract_start, contract_end, notes, team)
       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, '파주2팀')
     `);
-
-    const insertMany = db.transaction((sites) => {
+    const insertMany = db.transaction((seeds) => {
       let success = 0;
-      for (const s of sites) {
+      for (const s of seeds) {
+        if (existingNames.has(s.name)) continue;
         const code = 'P2-' + Date.now().toString(36).toUpperCase() + '-' +
                      Math.random().toString(36).slice(2, 5).toUpperCase();
-        insert.run(
-          code,
-          s.name,
-          '',            // address
-          s.owner || '',
-          s.phone || '',
-          s.elevators || 0,
-          s.contract_start || null,
-          s.contract_end || null,
-          s.notes || ''
-        );
+        insert.run(code, s.name, s.address||'', s.owner||'', s.phone||'',
+          s.elevators||0, s.contract_start||null, s.contract_end||null, s.notes||'');
         success++;
       }
       return success;
     });
-
     const inserted = insertMany(PAJU2_SEED_DATA);
-    console.log(`✅ 파주2팀 자동 복구 완료: ${inserted}개 삽입`);
+    console.log(`✅ 파주2팀 시드 삽입: ${inserted}개`);
   } catch (err) {
     console.error('❌ 파주2팀 자동 복구 실패:', err.message);
   }
