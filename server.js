@@ -1352,6 +1352,169 @@ const PAJU2_SEED_DATA = [
   { name: '더레드 CMS', elevators: 1, contract_start: '2022-02-01', contract_end: '2026-01-31', notes: 'POG', phone: '010-9216-6347', owner: '이현민' },
 ];
 
+const PAJU1_SEED_DATA = [
+  { name: '교하대원효성아파트', address: '경기도 파주시 청석로 300', owner: null, phone: null, manager: null, elevators: 0, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '교하토우프라자', address: '경기도 파주시 숲속노을로 265', owner: null, phone: '010-5345-4832', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '진원빌딩', address: '경기도 파주시 숲속노을로 275', owner: null, phone: '010-8708-4034', manager: null, elevators: 2, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '대경주차빌딩', address: '경기도 파주시 청석로 307', owner: null, phone: '010-9140-5450', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '물푸레도서관', address: '경기도 파주시 청석로 360', owner: null, phone: '010-6623-5351', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '엘엠시트', address: '경기도 파주시 돌단풍길64', owner: null, phone: '010-9168-3310', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '새중앙교회', address: '경기도 파주시 노을빛로38', owner: null, phone: '010-4157-8807', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '린타워', address: '경기도 파주시 책향기로277', owner: null, phone: '010-5730-5382', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '교하동산14-1', address: '경기도 파주시 천정구로201', owner: null, phone: '010-5352-1440', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '문발동573-3', address: '경기도 파주시 꽃창포길49', owner: null, phone: '010-8776-9196', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '보성팰리스', address: '경기도 파주시 동편길3', owner: null, phone: ' 010-5670-2021', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '에코빌101동', address: '경기도 파주시 교하로 933', owner: null, phone: '010 9796 8886', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '에코빌 102동', address: '경기도 파주시 교하로 933', owner: null, phone: '010-7768-1126', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '에코빌 103동', address: '경기도 파주시 교하로 933', owner: null, phone: '010-9922-3274', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '현장명', address: '주소', owner: null, phone: '연락처', manager: null, elevators: 3, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '시그네틱스(주)파주공장', address: '경기도 파주시 탄현면 평화로 711', owner: null, phone: null, manager: null, elevators: 5, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '정원갤러리', address: '경기도 파주시 탄현면 헤이리마을길 32', owner: null, phone: '010-5259-8100', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '촬영아카데미', address: '경기도 파주시 탄현면 헤이리마을길 26', owner: null, phone: '010-5328-9019', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '파주개성요양병원', address: '경기도 파주시 하지석길 45', owner: null, phone: '070-8685-6600', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '하이디하우스', address: '경기도 파주시 탄현면 헤이리마을길 76-95', owner: null, phone: '010-7937-1789', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '한향림도자미술관', address: '경기도 파주시 탄현면 헤이리마을길 82-37', owner: null, phone: '010-3626-6676', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '호텔 U&I', address: '경기도 파주시 탄현면 성동리 124-19', owner: null, phone: '010-8926-8919', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '화이트블록', address: '경기도 파주시 탄현면 헤이리마을길 72', owner: null, phone: '031-992-4400', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)류재은베이커리', address: '경기도 파주시 탄현면 요풍길 265', owner: null, phone: '010-9763-5014', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '느림보출판사', address: '경기도 파주시 탄현면 헤이리마을길 48-45', owner: null, phone: '010-3061-5986', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '법흥리497-105외1', address: '경기도 파주시 법흥로88', owner: null, phone: '010-8304-4936', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '창비창고시설', address: '파주시 헤이리로133번길63', owner: null, phone: '010-4136-5975', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '덕이동', address: '주소 미입력', owner: null, phone: null, manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '아이산 산부인과', address: '경기도 고양시 일산서구 덕이로 10', owner: null, phone: '010-5217-8182', manager: null, elevators: 2, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '아이산 산후조리원', address: '경기도 고양시 일산서구 덕이로 8', owner: null, phone: '010-5217-8182', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)까사미아파주사옥', address: '경기도 파주시 문발로 127', owner: null, phone: '010 3016 9102', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '세종출판벤쳐타운', address: '경기도 파주시 문발로 115', owner: null, phone: '010-8025-6173', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '스튜디오5274', address: '경기도 파주시 회동길 57-23', owner: null, phone: '010-3681-6270', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '효남빌딩', address: '경기도 파주시 회동길 77-3', owner: null, phone: '010-2369-8627', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '작가세계', address: '경기도 파주시 회동길 37-14', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '고래곰나비', address: '경기도 파주시 문발로 139 (문발동)', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '베네피아', address: '경기도 파주시 문발로 129', owner: null, phone: '010-5899-1516', manager: null, elevators: 2, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)다락원', address: '경기도 파주시 문발로 211', owner: null, phone: null, manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)도서출판보리', address: '경기도 파주시 직지길 492', owner: null, phone: '010-3579-3328', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)도서출판한길사', address: '경기도 파주시 광인사길 37', owner: null, phone: '031-955-2001', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '논장사옥', address: '경기도 파주시 회동길 329', owner: null, phone: '010-8834-3888', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '도서출판흙마당', address: '경기도 파주시 회동길 373', owner: null, phone: '010-2276-5190', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '레인보우 사옥', address: '경기도 파주시 회동길 363-21', owner: null, phone: '010-8870-0321', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '성지문화사', address: '경기도 파주시 광인사길 68', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '아시아출판문화정보센타', address: '경기도 파주시 회동길 145', owner: null, phone: '010-9162-0494', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '열화당사옥', address: '경기도 파주시 광인사길 25', owner: null, phone: '010-4571-0135', manager: null, elevators: 2, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '썸북스', address: '경기도 파주시 서패동472-4', owner: null, phone: '010-5844-3509', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '타이포그라피', address: '경기도 파주시 회동길 330', owner: null, phone: '010-3993-3437', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '토마토하우스', address: '경기도 파주시 회동길 325-6', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '파주2단지푸른사상사옥', address: '경기도 파주시 회동길 337-16', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '뜨인돌출판사사옥', address: '경기도 파주시 회동길 337-9', owner: null, phone: '010-2369-5627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '날마다 출판사', address: '경기도 파주시 회동길 513', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '리버인더로스팅', address: '경기도 파주시 지목로 9', owner: null, phone: '010-2330-0197', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '아카넷사옥', address: '경기도 파주시 회동길 445-3', owner: null, phone: '010-3282-8981', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '신촌동168-4', address: '경기도 파주시 168-4', owner: null, phone: '010-6363-3616', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)예인미술', address: '경기도 파주시 문발로 459', owner: null, phone: '010-9900-9356', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: 'RH스튜디오', address: '경기도 파주시 회동길 503-3', owner: null, phone: '010-2369-8627키움빌딩관리', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '싱크피쉬', address: '경기도 파주시 회동길 530-19', owner: null, phone: '010-3640-5220', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '문학수첩', address: '경기도 파주시 문발동 633-4 ', owner: null, phone: '031-955-9088', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '동양미디어사옥', address: '경기도 파주시 회동길 512', owner: null, phone: '010-2369-8627(키움빌딩관리)', manager: null, elevators: 2, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '디자인비따사옥', address: '경기도 파주시 회동길 446', owner: null, phone: '010-9357-6791', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '문발동75-32(아이빅테크)', address: '경기도 파주시 지목로 112-1', owner: null, phone: '010-5265-5946', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '(주)코바스', address: '경기도 파주시 신촌로 43', owner: null, phone: '010-6657-7911', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '그린빌원룸', address: '경기도 파주시 지목로 25-28', owner: null, phone: '010-5340-5571', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '문발동 73-18 근생', address: '경기도 파주시 교하로 891-2', owner: null, phone: '010 8428 8288', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '신촌동60-8근생', address: '경기도 파주시 지목로 89-24', owner: null, phone: '010-9012-1165', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '은진빌리지(문발동 73-17)', address: '경기도 파주시 교하로 891-10', owner: null, phone: '010-5276-1472', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '서패동188-1(언글래마우스)', address: '경기 파주시 서패동 188-1', owner: null, phone: '010-4743-3155', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '서패동178-7', address: '경기도 파주시 서패동178-7', owner: null, phone: '010-5355-4588', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '서패동240-6', address: '경기도 파주시 서패동240-6', owner: null, phone: null, manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '서패동245', address: '경기도 파주시 서패동245', owner: null, phone: null, manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '그룹에이치컴퍼니', address: '경기도 파주시 회동길 521-1', owner: null, phone: '010-4024-3503', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '비주프린팅사옥', address: '경기도 파주시 재두루미길 90', owner: null, phone: '010-5440-1557', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '씨앤톡사옥', address: '경기도 파주시 문발로 405', owner: null, phone: '010-3752-1738', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '예림인쇄사옥', address: '경기도 파주시 문발로 435-1', owner: null, phone: '010-2102-0824', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '신촌동40-19', address: '경기도 파주시 지목로139-18', owner: null, phone: null, manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '송촌동618-12', address: '파주시 소라지로 299-9', owner: null, phone: '010-6203-5099', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: 'MAXCIO', address: '파주시 소라지로 263번길 23-15', owner: null, phone: '010-4860-2986', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: 'MAXCIO G.spce', address: '파주시 소라지로 263번길 23-11', owner: null, phone: '010-4860-2986', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '톡사옥', address: '경기도 파주시 심학산로8', owner: null, phone: '010-2369-8627', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '송촌동 578-49', address: '경기 파주시 소라지로 235', owner: null, phone: '010-9492-4535', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1019-2(2.5.8.11)', address: '산내로123번길6-20', owner: null, phone: '010-8920-7128', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1031-4', address: '교하로133번길39', owner: null, phone: '010-3723-6632', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동 1065-2', address: '산내로7번길25-17', owner: null, phone: '010-5347-0321', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1065-3(2,4,6,8,10,12)', address: '산내로7번길25-19', owner: null, phone: '010-5904-5129', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1067-4', address: '산내로7번길7', owner: null, phone: '010-5592-5622', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1067-8', address: '산내로7번길7-4', owner: null, phone: '010-5818-3139', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1067-9(2,5,8,11)전화후', address: '산내로7번길7-5', owner: null, phone: '010-5169-6093  010-2933-3296(남자사장님)', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1069(2,5,8,11)', address: '산내로7번길25-7', owner: null, phone: '010-8706-8500', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1069-2 보통식당', address: '산내로7번길 25-1', owner: null, phone: '010-9947-0575', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '대웅주택', address: '와석순환로252번길7-9', owner: null, phone: '01042548866 조은부동산', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '프랑프랑', address: '와석순환로252번길7-1', owner: null, phone: '전주인010-4231-6009', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1105-5(2,5,8,11)', address: '와석순환로252번길7-23', owner: null, phone: '010-6794-8522', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1107-2(1,4,7,10)', address: '와석순환로252번길7-31', owner: null, phone: '010-3676-9931', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1107-7', address: '와석순환로252번길7-41', owner: null, phone: '010-6559-1378', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1109-3', address: '심학산로423번길12-12', owner: null, phone: '010-2124-0616', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1115-1', address: '심학산로423번길12-4', owner: null, phone: '010-9277-7461', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '캔빌(3,6,9,12)', address: '심학산로423번길12-8', owner: null, phone: '010-3357-2885', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1115-4(1,4,7,10)', address: '심학산로423번길12-10', owner: null, phone: '010-7235-6933', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1112-5', address: '심학산로423번길 12-1', owner: null, phone: '010 6234 1705', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1122-1', address: '와석순환로252번길14', owner: null, phone: '010-4313-6009', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1127-6', address: '심학산로423번길 13-8', owner: null, phone: '010-5818-3139', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1127-7(3,6,9,12)', address: '심학산로423번길13-10', owner: null, phone: '0.1088630536', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '윤&리하우스(1,4,7,10)', address: '심학산로423번길21-20', owner: null, phone: '010-9036-1132', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '진양빌딩', address: '심학산로423번길7-14', owner: null, phone: '010-7710-3554', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '목동동1131-2', address: '심학산로423번길7-8', owner: null, phone: '010-7518-0503', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '힐링플러스2', address: '심학산로415', owner: null, phone: '010-4400-6420', manager: null, elevators: 1, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '파주프리미엄아울렛', address: '경기도 파주시 탄현면 필승로 200', owner: null, phone: null, manager: null, elevators: 21, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '서패동235-12외2', address: '경기도 파주시 돌곶이길133', owner: null, phone: null, manager: null, elevators: 0, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '다율근린생활시설1동', address: '경기도 파주시 다율동528', owner: null, phone: null, manager: null, elevators: 0, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '다율동근린생활시설 2동', address: '경기도 파주시 다율동528', owner: null, phone: null, manager: null, elevators: 0, status: 'active', contract_start: null, contract_end: null, notes: null },
+  { name: '두영빌딩', address: '경기도 파주시 신촌동740-5', owner: null, phone: null, manager: null, elevators: 0, status: 'active', contract_start: null, contract_end: null, notes: null }
+];
+
+
+function autoRestorePaju1Team() {
+  try {
+    const count = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team = '파주1팀'").get();
+    if (count.cnt >= 100) {
+      console.log(`✅ 파주1팀 데이터 확인: ${count.cnt}개 (복구 불필요)`);
+      return;
+    }
+    console.log(`⚠️  파주1팀 데이터 부족 (현재 ${count.cnt}개) → 자동 복구 시작...`);
+
+    db.prepare("DELETE FROM sites WHERE team = '파주1팀'").run();
+
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO sites
+        (site_code, site_name, address, owner_name, owner_phone, manager_name,
+         total_elevators, status, contract_start, contract_end, notes, team)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, '파주1팀')
+    `);
+
+    const insertMany = db.transaction((sites) => {
+      let success = 0;
+      for (const s of sites) {
+        const code = 'P1-' + Date.now().toString(36).toUpperCase() + '-' +
+                     Math.random().toString(36).slice(2, 5).toUpperCase();
+        insert.run(
+          code,
+          s.name,
+          s.address || '',
+          s.owner || '',
+          s.phone || '',
+          s.manager || '',
+          s.elevators || 0,
+          s.contract_start || null,
+          s.contract_end || null,
+          s.notes || ''
+        );
+        success++;
+      }
+      return success;
+    });
+
+    const inserted = insertMany(PAJU1_SEED_DATA);
+    console.log(`✅ 파주1팀 자동 복구 완료: ${inserted}개 삽입`);
+  } catch (err) {
+    console.error('❌ 파주1팀 자동 복구 실패:', err.message);
+  }
+}
+
 function autoRestorePaju2Team() {
   try {
     const count = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team = '파주2팀'").get();
@@ -1402,6 +1565,7 @@ function autoRestorePaju2Team() {
 // ── 서버 시작 ──────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ API 서버 시작: http://0.0.0.0:${PORT}`);
-  // 서버 시작 직후 파주2팀 데이터 자동 복구 실행
+  // 서버 시작 직후 팀 데이터 자동 복구 실행
+  autoRestorePaju1Team();
   autoRestorePaju2Team();
 });
