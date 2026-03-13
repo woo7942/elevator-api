@@ -497,14 +497,37 @@ app.post('/api/auth/change-pin', wrap((req, res) => {
 
 
 app.get('/api/dashboard', wrap((req, res) => {
-  const sitesCount = db.prepare("SELECT COUNT(*) as count FROM sites WHERE status='active'").get();
-  const elevatorsCount = db.prepare(`
+  const teamFilter = req.query.team || null;  // 팀 필터 파라미터
+  const teamWhere = teamFilter ? " AND s.team=?" : "";
+  const teamParam = teamFilter ? [teamFilter] : [];
+  const teamWhereOnly = teamFilter ? " WHERE s.team=?" : "";
+
+  const sitesCount = teamFilter
+    ? db.prepare(`SELECT COUNT(*) as count FROM sites s WHERE s.status='active' AND s.team=?`).get(teamFilter)
+    : db.prepare("SELECT COUNT(*) as count FROM sites WHERE status='active'").get();
+
+  const elevatorsCount = teamFilter
+    ? db.prepare(`
+        SELECT COUNT(*) as count,
+        SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning,
+        SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault
+        FROM elevators e JOIN sites s ON s.id=e.site_id WHERE s.team=?
+      `).get(teamFilter)
+    : db.prepare(`
     SELECT COUNT(*) as count,
     SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning,
     SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault
     FROM elevators
   `).get();
-  const pendingIssues = db.prepare(`
+  const pendingIssues = teamFilter
+    ? db.prepare(`
+        SELECT COUNT(*) as total,
+        SUM(CASE WHEN ii.severity='중결함' THEN 1 ELSE 0 END) as critical,
+        SUM(CASE WHEN ii.severity='경결함' THEN 1 ELSE 0 END) as minor
+        FROM inspection_issues ii JOIN sites s ON s.id=ii.site_id
+        WHERE ii.status != '조치완료' AND s.team=?
+      `).get(teamFilter)
+    : db.prepare(`
     SELECT COUNT(*) as total,
     SUM(CASE WHEN severity='중결함' THEN 1 ELSE 0 END) as critical,
     SUM(CASE WHEN severity='경결함' THEN 1 ELSE 0 END) as minor
@@ -515,13 +538,32 @@ app.get('/api/dashboard', wrap((req, res) => {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const quarter = Math.ceil((now.getMonth() + 1) / 3);
 
-  const monthlyStats = db.prepare(
+  const monthlyStats = teamFilter
+    ? db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN mc.status='완료' THEN 1 ELSE 0 END) as done
+        FROM monthly_checks mc JOIN sites s ON s.id=mc.site_id
+        WHERE mc.check_year=? AND mc.check_month=? AND s.team=?`).get(yyyy, parseInt(mm), teamFilter)
+    : db.prepare(
     "SELECT COUNT(*) as total, SUM(CASE WHEN status='완료' THEN 1 ELSE 0 END) as done FROM monthly_checks WHERE check_year=? AND check_month=?"
   ).get(yyyy, parseInt(mm));
-  const quarterlyStats = db.prepare(
+  const quarterlyStats = teamFilter
+    ? db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN qc.status='완료' THEN 1 ELSE 0 END) as done
+        FROM quarterly_checks qc JOIN sites s ON s.id=qc.site_id
+        WHERE qc.check_year=? AND qc.quarter=? AND s.team=?`).get(yyyy, quarter, teamFilter)
+    : db.prepare(
     "SELECT COUNT(*) as total, SUM(CASE WHEN status='완료' THEN 1 ELSE 0 END) as done FROM quarterly_checks WHERE check_year=? AND quarter=?"
   ).get(yyyy, quarter);
-  const recentIssues = db.prepare(`
+  const recentIssues = teamFilter
+    ? db.prepare(`
+        SELECT ii.id, ii.issue_description, ii.severity, ii.status, ii.deadline,
+               s.site_name, e.elevator_name
+        FROM inspection_issues ii
+        JOIN sites s ON s.id=ii.site_id
+        JOIN elevators e ON e.id=ii.elevator_id
+        WHERE ii.status != '조치완료' AND s.team=?
+        ORDER BY CASE ii.severity WHEN '중결함' THEN 1 WHEN '경결함' THEN 2 ELSE 3 END,
+                 ii.deadline ASC LIMIT 5
+      `).all(teamFilter)
+    : db.prepare(`
     SELECT ii.id, ii.issue_description, ii.severity, ii.status, ii.deadline,
            s.site_name, e.elevator_name
     FROM inspection_issues ii
@@ -535,7 +577,14 @@ app.get('/api/dashboard', wrap((req, res) => {
   // 30일 이내 next_inspection_date 기준 검사 예정 건수
   const today = now.toISOString().slice(0, 10);
   const future30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const upcomingInspRow = db.prepare(`
+  const upcomingInspRow = teamFilter
+    ? db.prepare(`
+        SELECT COUNT(*) as count FROM inspections i
+        LEFT JOIN sites s ON s.id=i.site_id
+        WHERE i.next_inspection_date IS NOT NULL
+        AND i.next_inspection_date >= ? AND i.next_inspection_date <= ? AND s.team=?
+      `).get(today, future30, teamFilter)
+    : db.prepare(`
     SELECT COUNT(*) as count FROM inspections
     WHERE next_inspection_date IS NOT NULL
     AND next_inspection_date >= ? AND next_inspection_date <= ?
@@ -543,7 +592,21 @@ app.get('/api/dashboard', wrap((req, res) => {
   const upcomingInspections = upcomingInspRow?.count || 0;
 
   // 다가오는 검사 목록 (30일 이내, 최대 10건)
-  const upcomingInspectionList = db.prepare(`
+  const upcomingInspectionList = teamFilter
+    ? db.prepare(`
+        SELECT i.id, i.inspection_type, i.next_inspection_date,
+               i.inspector_name, i.inspection_agency,
+               s.site_name, s.id as site_id,
+               e.elevator_name, e.elevator_no, e.id as elevator_id,
+               CAST(julianday(i.next_inspection_date) - julianday(?) AS INTEGER) as days_remaining
+        FROM inspections i
+        LEFT JOIN sites s ON s.id = i.site_id
+        LEFT JOIN elevators e ON e.id = i.elevator_id
+        WHERE i.next_inspection_date IS NOT NULL
+        AND i.next_inspection_date >= ? AND i.next_inspection_date <= ? AND s.team=?
+        ORDER BY i.next_inspection_date ASC LIMIT 10
+      `).all(today, today, future30, teamFilter)
+    : db.prepare(`
     SELECT i.id, i.inspection_type, i.next_inspection_date,
            i.inspector_name, i.inspection_agency,
            s.site_name, s.id as site_id,
