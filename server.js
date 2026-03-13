@@ -7,6 +7,7 @@ const os = require('os');
 const { execFile, spawn } = require('child_process');
 const multer = require('multer');
 const sharp = require('sharp');
+const XLSX = require('xlsx');
 
 // ── 동영상 자동 압축 함수 (ffmpeg 사용) ──────────────────────
 // 목표: 50MB 이하 → 그대로 저장 / 50MB 초과 → ffmpeg으로 압축
@@ -99,9 +100,27 @@ const upload = multer({
   }
 });
 
+// Excel/CSV 전용 업로드 설정
+const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const name = file.originalname.toLowerCase();
+    if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv') ||
+        file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.mimetype === 'application/vnd.ms-excel' ||
+        file.mimetype === 'text/csv' ||
+        file.mimetype === 'application/octet-stream') {
+      cb(null, true);
+    } else {
+      cb(new Error('.xlsx, .xls, .csv 파일만 업로드 가능합니다'));
+    }
+  }
+});
+
 const app = express();
-const PORT = 8787;
-const DB_PATH = path.join(__dirname, 'elevator.db');
+const PORT = process.env.PORT || 8787;
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'elevator.db');
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
@@ -267,6 +286,28 @@ CREATE TABLE IF NOT EXISTS quarterly_checks (
 );
 `);
 
+// ── users 테이블 (별도 exec - 기존 DB에 추가) ─────────────────
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  pin TEXT NOT NULL,
+  role TEXT DEFAULT 'user' CHECK(role IN ('admin','user')),
+  is_active INTEGER DEFAULT 1,
+  tab_permissions TEXT DEFAULT NULL,
+  last_login DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`);
+
+// 관리자 계정 초기화 (우경주 / 관리자 / 없으면 생성)
+const adminExists = db.prepare("SELECT id FROM users WHERE name=?").get('우경주');
+if (!adminExists) {
+  db.prepare(`INSERT INTO users (name, pin, role) VALUES (?, ?, 'admin')`).run('우경주', '1234');
+  console.log('[init] 관리자 계정 생성: 우경주 (PIN: 1234) - 로그인 후 PIN 변경 권장');
+}
+
 // 샘플 데이터 삽입 (DB가 비어있을 경우)
 const siteCount = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
 if (siteCount.cnt === 0) {
@@ -327,7 +368,111 @@ const wrap = (fn) => async (req, res, next) => {
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 };
 
-// ── 대시보드 ──────────────────────────────────────────────────
+// ── 인증 (Auth) ────────────────────────────────────────────────
+
+// 로그인
+app.post('/api/auth/login', wrap((req, res) => {
+  const { name, pin } = req.body;
+  if (!name || !pin) return res.status(400).json({ success: false, error: '이름과 PIN을 입력해주세요' });
+
+  // tab_permissions 컬럼이 없는 구 DB 대응
+  try { db.exec("ALTER TABLE users ADD COLUMN tab_permissions TEXT DEFAULT NULL"); } catch(e) {}
+
+  const user = db.prepare("SELECT * FROM users WHERE name=? AND is_active=1").get(name);
+  if (!user) return res.status(401).json({ success: false, error: '등록되지 않은 사용자입니다' });
+  if (user.pin !== String(pin)) return res.status(401).json({ success: false, error: 'PIN이 올바르지 않습니다' });
+
+  // 마지막 로그인 시간 업데이트
+  db.prepare("UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
+
+  res.json({
+    success: true,
+    user: { id: user.id, name: user.name, role: user.role, tab_permissions: user.tab_permissions || null, last_login: user.last_login }
+  });
+}));
+
+// 사용자 목록 (관리자용)
+app.get('/api/users', wrap((req, res) => {
+  // tab_permissions 컬럼이 없는 구 DB 대응: ALTER TABLE로 추가 시도
+  try { db.exec("ALTER TABLE users ADD COLUMN tab_permissions TEXT DEFAULT NULL"); } catch(e) {}
+  const users = db.prepare("SELECT id, name, role, is_active, tab_permissions, last_login, created_at FROM users ORDER BY role DESC, name ASC").all();
+  res.json({ success: true, results: users });
+}));
+
+// 사용자 추가 (관리자용)
+app.post('/api/users', wrap((req, res) => {
+  const { name, pin, role } = req.body;
+  if (!name || !pin) return res.status(400).json({ success: false, error: '이름과 PIN을 입력해주세요' });
+  if (String(pin).length < 4 || String(pin).length > 6) {
+    return res.status(400).json({ success: false, error: 'PIN은 4~6자리여야 합니다' });
+  }
+  const exists = db.prepare("SELECT id FROM users WHERE name=?").get(name);
+  if (exists) return res.status(400).json({ success: false, error: '이미 등록된 이름입니다' });
+
+  const result = db.prepare(
+    "INSERT INTO users (name, pin, role) VALUES (?, ?, ?)"
+  ).run(name, String(pin), role === 'admin' ? 'admin' : 'user');
+
+  res.json({ success: true, id: result.lastInsertRowid });
+}));
+
+// 사용자 수정 (PIN 변경 / 역할 변경 / 활성화 / 탭 권한)
+app.put('/api/users/:id', wrap((req, res) => {
+  const { pin, role, is_active, tab_permissions } = req.body;
+  const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: '사용자를 찾을 수 없습니다' });
+
+  if (pin !== undefined && (String(pin).length < 4 || String(pin).length > 6)) {
+    return res.status(400).json({ success: false, error: 'PIN은 4~6자리여야 합니다' });
+  }
+
+  db.prepare(`UPDATE users SET
+    pin = COALESCE(?, pin),
+    role = COALESCE(?, role),
+    is_active = COALESCE(?, is_active),
+    tab_permissions = CASE WHEN ? IS NOT NULL THEN ? ELSE tab_permissions END,
+    updated_at = CURRENT_TIMESTAMP
+    WHERE id=?`
+  ).run(
+    pin !== undefined ? String(pin) : null,
+    role || null,
+    is_active !== undefined ? (is_active ? 1 : 0) : null,
+    tab_permissions !== undefined ? 1 : null,
+    tab_permissions !== undefined ? tab_permissions : null,
+    req.params.id
+  );
+  res.json({ success: true });
+}));
+
+// 사용자 삭제
+app.delete('/api/users/:id', wrap((req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.params.id);
+  if (!user) return res.status(404).json({ success: false, error: '사용자를 찾을 수 없습니다' });
+  if (user.role === 'admin' && user.name === '우경주') {
+    return res.status(403).json({ success: false, error: '최고 관리자는 삭제할 수 없습니다' });
+  }
+  db.prepare("DELETE FROM users WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+}));
+
+// PIN 변경 (본인)
+app.post('/api/auth/change-pin', wrap((req, res) => {
+  const { name, current_pin, new_pin } = req.body;
+  if (!name || !current_pin || !new_pin) {
+    return res.status(400).json({ success: false, error: '필수 정보가 부족합니다' });
+  }
+  if (String(new_pin).length < 4 || String(new_pin).length > 6) {
+    return res.status(400).json({ success: false, error: '새 PIN은 4~6자리여야 합니다' });
+  }
+  const user = db.prepare("SELECT * FROM users WHERE name=?").get(name);
+  if (!user || user.pin !== String(current_pin)) {
+    return res.status(401).json({ success: false, error: '현재 PIN이 올바르지 않습니다' });
+  }
+  db.prepare("UPDATE users SET pin=?, updated_at=CURRENT_TIMESTAMP WHERE name=?").run(String(new_pin), name);
+  res.json({ success: true });
+}));
+
+
 app.get('/api/dashboard', wrap((req, res) => {
   const sitesCount = db.prepare("SELECT COUNT(*) as count FROM sites WHERE status='active'").get();
   const elevatorsCount = db.prepare(`
@@ -390,20 +535,65 @@ app.get('/api/dashboard', wrap((req, res) => {
     LIMIT 10
   `).all(today, today, future30);
 
-  res.json({ success: true, data: { sites: sitesCount?.count || 0, elevators: elevatorsCount, pendingIssues, monthlyStats, quarterlyStats, recentIssues, upcomingInspections, upcomingInspectionList } });
+  // 팀별 통계
+  const teamStats = db.prepare(`
+    SELECT s.team,
+      COUNT(DISTINCT s.id) as site_count,
+      COUNT(DISTINCT e.id) as elevator_count,
+      SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault_count,
+      SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning_count,
+      SUM(CASE WHEN ii.status != '조치완료' THEN 1 ELSE 0 END) as pending_issues,
+      SUM(CASE WHEN ii.severity='중결함' AND ii.status != '조치완료' THEN 1 ELSE 0 END) as critical_issues
+    FROM sites s
+    LEFT JOIN elevators e ON e.site_id = s.id
+    LEFT JOIN inspection_issues ii ON ii.site_id = s.id AND ii.status != '조치완료'
+    WHERE s.status = 'active' AND s.team IS NOT NULL
+    GROUP BY s.team
+    ORDER BY s.team
+  `).all();
+
+  res.json({ success: true, data: { sites: sitesCount?.count || 0, elevators: elevatorsCount, pendingIssues, monthlyStats, quarterlyStats, recentIssues, upcomingInspections, upcomingInspectionList, teamStats } });
 }));
 
 // ── 현장(Sites) ───────────────────────────────────────────────
 app.get('/api/sites', wrap((req, res) => {
-  const { search, status } = req.query;
+  const { search, status, team } = req.query;
   let sql = `SELECT s.*, COUNT(e.id) as elevator_count FROM sites s LEFT JOIN elevators e ON e.site_id=s.id`;
   const params = [];
   const where = [];
   if (search) { where.push("(s.site_name LIKE ? OR s.site_code LIKE ? OR s.address LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
   if (status) { where.push("s.status=?"); params.push(status); }
+  if (team) { where.push("s.team=?"); params.push(team); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' GROUP BY s.id ORDER BY s.created_at DESC';
+  sql += ' GROUP BY s.id ORDER BY s.id ASC';
   res.json({ success: true, results: db.prepare(sql).all(...params) });
+}));
+
+// 팀 목록 조회
+app.get('/api/teams', wrap((req, res) => {
+  // sites 테이블의 팀 + 별도 teams 테이블 팀을 합쳐서 반환
+  const fromSites = db.prepare("SELECT DISTINCT team FROM sites WHERE team IS NOT NULL").all().map(r => r.team);
+  let fromTeamsTable = [];
+  try {
+    fromTeamsTable = db.prepare("SELECT name FROM teams").all().map(r => r.name);
+  } catch(_) {}
+  const merged = [...new Set([...fromSites, ...fromTeamsTable])].sort();
+  res.json({ success: true, teams: merged });
+}));
+
+// 새 팀 이름 등록 (해당 팀이 없으면 추가만 기록 - 실제 사이트 없어도 팀 목록에 표시)
+app.post('/api/teams', wrap((req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ success: false, error: '팀 이름이 없습니다' });
+  const teamName = name.trim();
+  // 이미 존재하는지 확인
+  const existing = db.prepare("SELECT DISTINCT team FROM sites WHERE team=?").get(teamName);
+  if (existing) return res.json({ success: true, message: '이미 존재하는 팀입니다', team: teamName });
+  // teams 테이블이 없으면 sites 기반으로만 관리 → 빈 팀을 sites에 placeholder로 넣지 않고
+  // 별도 teams 테이블 생성
+  db.prepare(`CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+  db.prepare(`INSERT OR IGNORE INTO teams (name) VALUES (?)`).run(teamName);
+  res.json({ success: true, team: teamName });
 }));
 
 app.get('/api/sites/:id', wrap((req, res) => {
@@ -413,17 +603,63 @@ app.get('/api/sites/:id', wrap((req, res) => {
 }));
 
 app.post('/api/sites', wrap((req, res) => {
-  const { site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes } = req.body;
-  const r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null);
+  const { site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes, team } = req.body;
+  const r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes, team) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, team || '파주1팀');
   res.json({ success: true, id: r.lastInsertRowid });
 }));
 
 app.put('/api/sites/:id', wrap((req, res) => {
-  const { site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes } = req.body;
-  db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, req.params.id);
+  const { site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes, team } = req.body;
+  db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, team=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, team || '파주1팀', req.params.id);
   res.json({ success: true });
+}));
+
+// ── 현장 대량 등록 (엑셀/텍스트) ─────────────────────────────
+app.post('/api/sites/import', wrap((req, res) => {
+  const { sites, team } = req.body;
+  if (!Array.isArray(sites) || sites.length === 0) {
+    return res.status(400).json({ success: false, error: '등록할 현장 데이터가 없습니다' });
+  }
+  const insertStmt = db.prepare(
+    `INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, notes, team)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`
+  );
+  const inserted = [];
+  const errors = [];
+  const importTeam = team || '파주1팀';
+  const importMany = db.transaction((rows) => {
+    for (const row of rows) {
+      try {
+        // site_code 자동 생성
+        const code = row.site_code || `S-${Date.now()}-${Math.floor(Math.random()*9000+1000)}`;
+        const r = insertStmt.run(
+          code,
+          row.site_name || '',
+          row.address || '',
+          row.owner_name || null,
+          row.owner_phone || null,
+          row.manager_name || null,
+          parseInt(row.total_elevators) || 1,
+          row.contract_start || null,
+          row.notes || null,
+          importTeam
+        );
+        inserted.push({ id: r.lastInsertRowid, site_name: row.site_name, site_code: code });
+      } catch (e) {
+        errors.push({ site_name: row.site_name, error: e.message });
+      }
+    }
+  });
+  importMany(sites);
+  res.json({
+    success: true,
+    inserted: inserted.length,
+    errors: errors.length,
+    insertedList: inserted,
+    errorList: errors
+  });
 }));
 
 app.delete('/api/sites/:id', wrap((req, res) => {
@@ -432,6 +668,112 @@ app.delete('/api/sites/:id', wrap((req, res) => {
 }));
 
 // ── 승강기(Elevators) ─────────────────────────────────────────
+
+// 엑셀 파일 파싱 → 현장 데이터 미리보기 (저장 안 함)
+app.post('/api/sites/parse-excel', uploadExcel.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let sites = [];
+
+    if (ext === '.xlsx' || ext === '.xls') {
+      // 엑셀 파싱
+      const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) return res.json({ success: true, sites: [] });
+
+      // 헤더 행 감지 (첫 번째 행)
+      const header = rows[0].map(h => String(h).trim().toLowerCase());
+      const colMap = {
+        site_name: header.findIndex(h => h.includes('현장') || h.includes('사이트') || h.includes('건물') || h.includes('명칭') || h === 'name'),
+        address: header.findIndex(h => h.includes('주소') || h.includes('address')),
+        owner_name: header.findIndex(h => h.includes('소유') || h.includes('건물주') || h.includes('owner')),
+        owner_phone: header.findIndex(h => (h.includes('소유') && h.includes('전화')) || h.includes('연락처') || h.includes('phone')),
+        manager_name: header.findIndex(h => h.includes('담당') || h.includes('관리자') || h.includes('manager')),
+        total_elevators: header.findIndex(h => h.includes('대수') || h.includes('승강기') || h.includes('elevator')),
+        contract_start: header.findIndex(h => h.includes('계약') || h.includes('contract')),
+        notes: header.findIndex(h => h.includes('비고') || h.includes('메모') || h.includes('note')),
+      };
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const siteName = colMap.site_name >= 0 ? String(row[colMap.site_name] || '').trim() : String(row[0] || '').trim();
+        if (!siteName) continue;
+        sites.push({
+          site_name: siteName,
+          address: colMap.address >= 0 ? String(row[colMap.address] || '').trim() : (String(row[1] || '').trim()),
+          owner_name: colMap.owner_name >= 0 ? String(row[colMap.owner_name] || '').trim() : '',
+          owner_phone: colMap.owner_phone >= 0 ? String(row[colMap.owner_phone] || '').trim() : '',
+          manager_name: colMap.manager_name >= 0 ? String(row[colMap.manager_name] || '').trim() : '',
+          total_elevators: colMap.total_elevators >= 0 ? parseInt(row[colMap.total_elevators]) || 1 : 1,
+          contract_start: colMap.contract_start >= 0 ? String(row[colMap.contract_start] || '').trim() : '',
+          notes: colMap.notes >= 0 ? String(row[colMap.notes] || '').trim() : '',
+        });
+      }
+    } else if (ext === '.csv') {
+      // CSV 파싱 (XLSX 라이브러리로도 가능)
+      const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) return res.json({ success: true, sites: [] });
+      const header = rows[0].map(h => String(h).trim().toLowerCase());
+      const colSiteName = header.findIndex(h => h.includes('현장') || h.includes('건물') || h === 'name');
+      const colAddr = header.findIndex(h => h.includes('주소'));
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const siteName = colSiteName >= 0 ? String(row[colSiteName] || '').trim() : String(row[0] || '').trim();
+        if (!siteName) continue;
+        sites.push({
+          site_name: siteName,
+          address: colAddr >= 0 ? String(row[colAddr] || '').trim() : (String(row[1] || '').trim()),
+          owner_name: '', owner_phone: '', manager_name: '',
+          total_elevators: 1, contract_start: '', notes: '',
+        });
+      }
+    } else {
+      return res.status(400).json({ success: false, error: '.xlsx, .xls, .csv 파일만 지원합니다' });
+    }
+
+    res.json({ success: true, sites, count: sites.length });
+  } catch (e) {
+    console.error('엑셀 파싱 오류:', e);
+    res.status(500).json({ success: false, error: '파일 파싱 실패: ' + e.message });
+  }
+});
+
+// 텍스트 파싱 → 현장 데이터 미리보기
+app.post('/api/sites/parse-text', wrap((req, res) => {
+  const { text, team } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ success: false, error: '텍스트가 없습니다' });
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const sites = [];
+
+  for (const line of lines) {
+    // 탭 또는 쉼표로 구분된 형식 처리
+    // 형식1: 현장명\t주소\t담당자\t대수
+    // 형식2: 현장명,주소,담당자,대수
+    // 형식3: 현장명만
+    const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+    const siteName = parts[0]?.trim();
+    if (!siteName || siteName.startsWith('#') || siteName.startsWith('//')) continue;
+
+    sites.push({
+      site_name: siteName,
+      address: parts[1]?.trim() || '',
+      manager_name: parts[2]?.trim() || '',
+      total_elevators: parseInt(parts[3]) || 1,
+      owner_name: parts[4]?.trim() || '',
+      owner_phone: parts[5]?.trim() || '',
+      contract_start: parts[6]?.trim() || '',
+      notes: parts[7]?.trim() || '',
+    });
+  }
+
+  res.json({ success: true, sites, count: sites.length });
+}));
+
 app.get('/api/elevators', wrap((req, res) => {
   const { site_id, status, search } = req.query;
   let sql = `SELECT e.*, s.site_name, s.site_code FROM elevators e LEFT JOIN sites s ON s.id=e.site_id`;
@@ -674,8 +1016,8 @@ app.post('/api/upload', upload.array('files', 20), async (req, res) => {
 
 // ── 월 점검(Monthly) ──────────────────────────────────────────
 app.get('/api/monthly', wrap((req, res) => {
-  const { site_id, elevator_id, check_year, check_month, status } = req.query;
-  let sql = `SELECT mc.*, s.site_name, e.elevator_name FROM monthly_checks mc LEFT JOIN sites s ON s.id=mc.site_id LEFT JOIN elevators e ON e.id=mc.elevator_id`;
+  const { site_id, elevator_id, check_year, check_month, status, team } = req.query;
+  let sql = `SELECT mc.*, s.site_name, s.team, e.elevator_name, e.elevator_no FROM monthly_checks mc LEFT JOIN sites s ON s.id=mc.site_id LEFT JOIN elevators e ON e.id=mc.elevator_id`;
   const params = [];
   const where = [];
   if (site_id) { where.push('mc.site_id=?'); params.push(site_id); }
@@ -683,8 +1025,9 @@ app.get('/api/monthly', wrap((req, res) => {
   if (check_year) { where.push('mc.check_year=?'); params.push(check_year); }
   if (check_month) { where.push('mc.check_month=?'); params.push(check_month); }
   if (status) { where.push('mc.status=?'); params.push(status); }
+  if (team) { where.push('s.team=?'); params.push(team); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' ORDER BY mc.check_year DESC, mc.check_month DESC, mc.created_at DESC';
+  sql += ' ORDER BY s.site_name ASC, e.elevator_no ASC, mc.created_at DESC';
   res.json({ success: true, results: db.prepare(sql).all(...params) });
 }));
 
