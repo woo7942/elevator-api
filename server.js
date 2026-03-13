@@ -506,19 +506,24 @@ app.get('/api/dashboard', wrap((req, res) => {
     ? db.prepare(`SELECT COUNT(*) as count FROM sites s WHERE s.status='active' AND s.team=?`).get(teamFilter)
     : db.prepare("SELECT COUNT(*) as count FROM sites WHERE status='active'").get();
 
+  // 승강기 대수: total_elevators 합산 (실제 등록 여부와 무관하게 계약 대수 표시)
   const elevatorsCount = teamFilter
     ? db.prepare(`
-        SELECT COUNT(*) as count,
-        SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning,
-        SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault
-        FROM elevators e JOIN sites s ON s.id=e.site_id WHERE s.team=?
-      `).get(teamFilter)
+        SELECT
+          COALESCE(SUM(s.total_elevators), 0) as count,
+          COALESCE((SELECT SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END)
+            FROM elevators e JOIN sites s2 ON s2.id=e.site_id WHERE s2.team=?), 0) as warning,
+          COALESCE((SELECT SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END)
+            FROM elevators e JOIN sites s2 ON s2.id=e.site_id WHERE s2.team=?), 0) as fault
+        FROM sites s WHERE s.status='active' AND s.team=?
+      `).get(teamFilter, teamFilter, teamFilter)
     : db.prepare(`
-    SELECT COUNT(*) as count,
-    SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning,
-    SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault
-    FROM elevators
-  `).get();
+        SELECT
+          COALESCE(SUM(total_elevators), 0) as count,
+          (SELECT SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) FROM elevators) as warning,
+          (SELECT SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) FROM elevators) as fault
+        FROM sites WHERE status='active'
+      `).get();
   const pendingIssues = teamFilter
     ? db.prepare(`
         SELECT COUNT(*) as total,
@@ -621,17 +626,18 @@ app.get('/api/dashboard', wrap((req, res) => {
     LIMIT 10
   `).all(today, today, future30);
 
-  // 팀별 통계
+  // 팀별 통계 (elevator_count = total_elevators 합산)
   const teamStats = db.prepare(`
     SELECT s.team,
       COUNT(DISTINCT s.id) as site_count,
-      COUNT(DISTINCT e.id) as elevator_count,
-      SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault_count,
-      SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning_count,
+      COALESCE(SUM(s.total_elevators), 0) as elevator_count,
+      COALESCE((SELECT SUM(CASE WHEN e2.status='fault' THEN 1 ELSE 0 END)
+        FROM elevators e2 WHERE e2.site_id = s.id), 0) as fault_count,
+      COALESCE((SELECT SUM(CASE WHEN e2.status='warning' THEN 1 ELSE 0 END)
+        FROM elevators e2 WHERE e2.site_id = s.id), 0) as warning_count,
       SUM(CASE WHEN ii.status != '조치완료' THEN 1 ELSE 0 END) as pending_issues,
       SUM(CASE WHEN ii.severity='중결함' AND ii.status != '조치완료' THEN 1 ELSE 0 END) as critical_issues
     FROM sites s
-    LEFT JOIN elevators e ON e.site_id = s.id
     LEFT JOIN inspection_issues ii ON ii.site_id = s.id AND ii.status != '조치완료'
     WHERE s.status = 'active' AND s.team IS NOT NULL
     GROUP BY s.team
