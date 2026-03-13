@@ -1294,7 +1294,114 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
   });
 });
 
+// ── 파주2팀 자동 복구 (서버 재시작 시 데이터 소실 방지) ────────────
+// Render 무료 플랜은 서버 재시작 시 SQLite DB가 초기화됨
+// 아래 데이터는 Jin.xlsx 원본 기준으로 하드코딩된 파주2팀 52개 현장
+const PAJU2_SEED_DATA = [
+  { name: '운정물재생센터(매달거래명세표같이보내기)', elevators: 1, contract_start: '2021-01-01', contract_end: '2024-12-31', notes: 'FM', phone: '031-949-5645', owner: '㈜에코비트워터' },
+  { name: '최성만빌딩(분담)CMS', elevators: 1, contract_start: '2022-08-01', contract_end: '2027-07-31', notes: 'FM', phone: '010-9079-6252', owner: '최성만' },
+  { name: '운정월드타워(분담) CMS', elevators: 2, contract_start: '2022-07-01', contract_end: '2027-06-30', notes: 'FM', phone: '031-955-1331', owner: '유원종합관리' },
+  { name: '운정와이즈병원(분담)CMS', elevators: 4, contract_start: '2024-01-01', contract_end: '2028-12-31', notes: 'FM', phone: '031-937-8888', owner: '엔씨에스' },
+  { name: '운정법조타운(분담) CMS', elevators: 4, contract_start: '2023-01-01', contract_end: '2027-12-31', notes: 'FM', phone: '031-839-3920', owner: '플러스탑' },
+  { name: '와동동1640-2(분담)', elevators: 1, contract_start: '2024-08-01', contract_end: '2029-07-31', notes: 'FM', phone: '952-5454', owner: '엄일성' },
+  { name: '와동동1638-4(분담)CMS', elevators: 1, contract_start: '2023-04-01', contract_end: '2028-03-31', notes: 'FM', phone: '010-7120-4704', owner: '김은희' },
+  { name: '와동동1630-2(분담)CMS', elevators: 1, contract_start: '2024-02-01', contract_end: '2029-01-31', notes: 'FM', phone: '010-8629-8222', owner: '㈜디에스건설' },
+  { name: '와동동1622-4(분담) 나래빌 CMS', elevators: 1, contract_start: '2021-09-01', contract_end: '2026-08-30', notes: 'FM', phone: '010-5328-9947', owner: '유영숙' },
+  { name: '와동동1606-1(분담) CMS', elevators: 1, contract_start: '2020-10-01', contract_end: '2025-09-30', notes: 'FM', phone: '010-7737-8777', owner: '전상순(광장)' },
+  { name: '와동동1569-1(분담) CMS', elevators: 1, contract_start: '2023-11-01', contract_end: '2028-10-31', notes: 'FM', phone: '010-8706-8500', owner: '에스와이' },
+  { name: '순복음큰기적교회(분담)', elevators: 1, contract_start: '2022-02-01', contract_end: '2027-01-31', notes: 'FM', phone: '031-942-0109', owner: '이용우' },
+  { name: '트윈프라자1(분담)', elevators: 1, contract_start: '2021-02-01', contract_end: '2026-01-31', notes: 'FM', phone: '031-953-8800', owner: '신우이엔씨' },
+  { name: '트윈프라자2(분담)', elevators: 1, contract_start: '2021-02-01', contract_end: '2026-01-31', notes: 'FM', phone: '031-953-8800', owner: '신우이엔씨' },
+  { name: '메디스타워(와동동1303-4) (분담)CMS', elevators: 2, contract_start: '2022-07-01', contract_end: '2027-06-30', notes: 'FM', phone: '947-6961', owner: '메디스타워관리단' },
+  { name: '와동동1572-8(분담)3h 빌', elevators: 1, contract_start: '2022-12-01', contract_end: '2027-11-30', notes: 'FM', phone: '010-3243-2724', owner: '송병일' },
+  { name: 'J 프라자(와동동)(매월 우편발송)분담', elevators: 1, contract_start: '2022-08-22', contract_end: '2027-08-31', notes: 'FM', phone: '010-3271-5445', owner: '전성호' },
+  { name: '블루앤레드  분담(CMS)와동동1652-2', elevators: 1, contract_start: '2020-10-01', contract_end: '2025-09-30', notes: 'FM', phone: '010-8700-2786', owner: '이용수' },
+  { name: '지산프라자(C2M계산서발행 주소)', elevators: 1, contract_start: '2023-02-01', contract_end: '2025-01-31', notes: 'FM', phone: '010-3129-1933', owner: '신양옥' },
+  { name: '운정행복센터', elevators: 1, contract_start: '2022-01-01', contract_end: '2024-12-31', notes: 'FM', phone: '950-1865', owner: '파주도시관광공사' },
+  { name: '센타프라자 지로입금', elevators: 1, contract_start: '2021-11-01', contract_end: '2026-10-31', notes: 'FM', phone: '943-5859', owner: '㈜월드베스트' },
+  { name: '형원', elevators: 1, contract_start: '2025-01-01', contract_end: '2029-12-31', notes: 'FM', phone: '010-3233-0681', owner: '에덴복지재단' },
+  { name: '명품프라자 (계산서X)', elevators: 1, contract_start: '2020-04-01', contract_end: '2025-03-31', notes: 'FM', phone: '010-9470-4725', owner: '윤기환' },
+  { name: '와동동1615-1(분담) 더블루', elevators: 1, contract_start: '2023-05-01', contract_end: '2027-04-30', notes: 'POG', phone: '010-5488-6337', owner: '문춘희' },
+  { name: '운정지구C3-1-5 CMS', elevators: 1, contract_start: '2025-09-01', contract_end: '2027-08-31', notes: 'POG', phone: '010-5818-3139', owner: '관리자 이주현' },
+  { name: '와동동1603-4(분담)CMS', elevators: 1, contract_start: '2024-09-01', contract_end: '2026-08-31', notes: 'POG', phone: '010-4947-6863', owner: '신대호' },
+  { name: '와동동1608(분담)광장부동산 CMS', elevators: 1, contract_start: '2020-11-01', contract_end: '2026-11-30', notes: 'POG', phone: '010-5402-5898', owner: '이태주' },
+  { name: '와동동1572-3(분담) CMS', elevators: 1, contract_start: '2021-12-01', contract_end: '2025-11-30', notes: 'POG', phone: '010-8880-7668', owner: '이형국' },
+  { name: '와동동1642-3(분담) CMS', elevators: 1, contract_start: '2025-05-01', contract_end: '2027-04-30', notes: '.', phone: '010-9311-1672', owner: '육현임' },
+  { name: '와동동1658-1(분담)CMS', elevators: 1, contract_start: '2023-04-01', contract_end: '2027-03-31', notes: 'POG', phone: '010-5314-9616', owner: '김한규' },
+  { name: '제파크37차(분담)당하동250-1 CMS', elevators: 1, contract_start: '2021-06-01', contract_end: '2026-05-31', notes: 'POG', phone: '010-7365-3131', owner: '이아람' },
+  { name: '제파크38차(분담)당하동250-7 CMS', elevators: 1, contract_start: '2023-06-01', contract_end: '2026-05-31', notes: 'POG', phone: '010-6403-2237', owner: '조한성' },
+  { name: '제파크39차(분담)당하동250-10 CMS', elevators: 1, contract_start: '2021-09-01', contract_end: '2024-08-31', notes: 'POG', phone: '010-7365-3131', owner: '이아람(운정사랑부동산)' },
+  { name: '와동동1548-2(분담) CMS진스빌', elevators: 1, contract_start: '2021-06-01', contract_end: '2029-05-31', notes: 'POG', phone: '010-5453-7099', owner: '최효진' },
+  { name: '아스트로(분담) CMS', elevators: 1, contract_start: '2022-11-01', contract_end: '2026-10-31', notes: 'POG', phone: '010-2389-9447', owner: '박양순' },
+  { name: '운정지구C1-34-4(분담) CMS', elevators: 1, contract_start: '2025-01-01', contract_end: '2026-12-31', notes: 'POG', phone: '010-5540-0345', owner: '김용교' },
+  { name: '당하동198-17포레스트하우스(분담)', elevators: 1, contract_start: '2023-06-01', contract_end: '2025-05-31', notes: 'POG', phone: '010-5321-9553', owner: '이레건축' },
+  { name: '홍익유치원(분담) CMS', elevators: 1, contract_start: '2022-06-01', contract_end: '2024-12-31', notes: 'POG', phone: '010-8932-0740', owner: '이혜경' },
+  { name: '제일풍경채3차 그랑퍼스트(분담)', elevators: 14, contract_start: '2024-12-01', contract_end: '2026-11-30', notes: 'POG', phone: '946-7747', owner: '제일풍경재3차 그랑퍼스트' },
+  { name: '제일풍경채 그랑퍼스트상가 퍼스트도장(분담)CMS', elevators: 1, contract_start: '2024-11-01', contract_end: '2025-10-31', notes: 'POG', phone: '010-5511-8182', owner: '김재훈' },
+  { name: '제일풍경채 그랑퍼스트분담)', elevators: 51, contract_start: '2024-08-16', contract_end: '2027-08-15', notes: 'POG', phone: '949-8468', owner: '운정제일풍경채그랑퍼스트' },
+  { name: '대광빌딩', elevators: 1, contract_start: '2023-06-01', contract_end: '2025-05-31', notes: 'POG', phone: '010-7727-9159', owner: '정혜숙' },
+  { name: '지애지비리지(당하동198-7)', elevators: 1, contract_start: '2022-10-01', contract_end: '2023-09-31', notes: 'POG', phone: '010-8020-2455', owner: '솔로몬신축' },
+  { name: '와동동1642-1', elevators: 1, contract_start: '2023-08-01', contract_end: '2024-07-31', notes: 'POG', phone: '952-5454', owner: '한주PMC' },
+  { name: '와동동1636-4', elevators: 1, contract_start: '2022-01-01', contract_end: '2024-12-31', notes: 'POG', phone: '010-7118-2834', owner: '김만호' },
+  { name: '와동동1632-1(김선분부동산) CMS', elevators: 1, contract_start: '2020-03-01', contract_end: '2026-02-28', notes: 'POG', phone: '010-7765-2988', owner: '김선분' },
+  { name: '부엔디아(와동동1572-4) CMS', elevators: 1, contract_start: '2020-05-01', contract_end: '2027-05-31', notes: 'POG', phone: '010-5453-7097', owner: '이명재' },
+  { name: '소망빌딩(김송자)', elevators: 1, contract_start: '2022-02-01', contract_end: '2025-01-31', notes: 'POG', phone: '010-6663-0031', owner: '김송자' },
+  { name: '에덴하우스', elevators: 3, contract_start: null, contract_end: '2016-06-30', notes: 'POG', phone: '', owner: '에덴복지재단' },
+  { name: '와동동1634-1CMS 문파크', elevators: 1, contract_start: '2023-05-01', contract_end: '2025-04-30', notes: 'POG', phone: '010-8829-7530', owner: '안이자' },
+  { name: '와동동1662-4(다온하우스) CMS', elevators: 1, contract_start: '2024-03-01', contract_end: '2026-02-28', notes: 'POG', phone: '010-9278-7114', owner: '손우기' },
+  { name: '더레드 CMS', elevators: 1, contract_start: '2022-02-01', contract_end: '2026-01-31', notes: 'POG', phone: '010-9216-6347', owner: '이현민' },
+];
+
+function autoRestorePaju2Team() {
+  try {
+    const count = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team = '파주2팀'").get();
+    if (count.cnt >= 50) {
+      console.log(`✅ 파주2팀 데이터 확인: ${count.cnt}개 (복구 불필요)`);
+      return;
+    }
+    console.log(`⚠️  파주2팀 데이터 부족 (현재 ${count.cnt}개) → 자동 복구 시작...`);
+
+    // 기존 파주2팀 레코드 모두 삭제 후 재삽입 (깔끔하게)
+    db.prepare("DELETE FROM sites WHERE team = '파주2팀'").run();
+
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO sites
+        (site_code, site_name, address, owner_name, owner_phone,
+         total_elevators, status, contract_start, contract_end, notes, team)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, '파주2팀')
+    `);
+
+    const insertMany = db.transaction((sites) => {
+      let success = 0;
+      for (const s of sites) {
+        const code = 'P2-' + Date.now().toString(36).toUpperCase() + '-' +
+                     Math.random().toString(36).slice(2, 5).toUpperCase();
+        insert.run(
+          code,
+          s.name,
+          '',            // address
+          s.owner || '',
+          s.phone || '',
+          s.elevators || 0,
+          s.contract_start || null,
+          s.contract_end || null,
+          s.notes || ''
+        );
+        success++;
+      }
+      return success;
+    });
+
+    const inserted = insertMany(PAJU2_SEED_DATA);
+    console.log(`✅ 파주2팀 자동 복구 완료: ${inserted}개 삽입`);
+  } catch (err) {
+    console.error('❌ 파주2팀 자동 복구 실패:', err.message);
+  }
+}
+
 // ── 서버 시작 ──────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ API 서버 시작: http://0.0.0.0:${PORT}`);
+  // 서버 시작 직후 파주2팀 데이터 자동 복구 실행
+  autoRestorePaju2Team();
 });
