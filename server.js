@@ -301,6 +301,29 @@ CREATE TABLE IF NOT EXISTS users (
 );
 `);
 
+// ── DB 마이그레이션 (컬럼 자동 추가) ─────────────────────────
+const sitesColumns = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+if (!sitesColumns.includes('team')) {
+  db.exec("ALTER TABLE sites ADD COLUMN team TEXT DEFAULT NULL");
+  console.log('[migration] sites 테이블에 team 컬럼 추가됨');
+}
+if (!sitesColumns.includes('elevator_count')) {
+  // elevator_count는 뷰/쿼리로 계산하므로 컬럼 추가 불필요 (s.team 오류 방지용)
+}
+
+// elevators 테이블 마이그레이션
+const elevatorsColumns = db.prepare("PRAGMA table_info(elevators)").all().map(c => c.name);
+const elevColsToAdd = [
+  { name: 'load_capacity', type: 'INTEGER DEFAULT NULL' },
+  { name: 'speed', type: 'REAL DEFAULT NULL' },
+];
+for (const col of elevColsToAdd) {
+  if (!elevatorsColumns.includes(col.name)) {
+    db.exec(`ALTER TABLE elevators ADD COLUMN ${col.name} ${col.type}`);
+    console.log(`[migration] elevators 테이블에 ${col.name} 컬럼 추가됨`);
+  }
+}
+
 // 관리자 계정 초기화 (우경주 / 관리자 / 없으면 생성)
 const adminExists = db.prepare("SELECT id FROM users WHERE name=?").get('우경주');
 if (!adminExists) {
