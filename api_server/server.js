@@ -649,13 +649,19 @@ app.get('/api/dashboard', wrap((req, res) => {
              ii.deadline ASC LIMIT 5
   `).all();
 
-  // 팀별 통계 (전체 보기 시)
+  // 팀별 통계 (전체 보기 시) - Flutter 필드명 일치: sites→sites, elevators→elevators
   const teamStats = db.prepare(`
     SELECT s.team,
       COUNT(DISTINCT s.id) as sites,
-      COUNT(e.id) as elevators,
-      SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault,
-      SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning
+      COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN 1 ELSE 0 END), 0) as elevators,
+      COALESCE(SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END), 0) as fault,
+      COALESCE(SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END), 0) as warning,
+      (SELECT COUNT(*) FROM inspection_issues ii2
+        JOIN sites s2 ON s2.id=ii2.site_id
+        WHERE s2.team=s.team AND ii2.status != '조치완료') as pending_issues,
+      (SELECT COUNT(*) FROM inspection_issues ii3
+        JOIN sites s3 ON s3.id=ii3.site_id
+        WHERE s3.team=s.team AND ii3.status != '조치완료' AND ii3.severity='중결함') as critical_issues
     FROM sites s
     LEFT JOIN elevators e ON e.site_id=s.id
     WHERE s.team != '' AND s.team IS NOT NULL AND s.status='active'
@@ -1107,7 +1113,7 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
 app.get('/api/version', (req, res) => {
   const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
-  res.json({ version: '2.3.1', users: users.cnt, teams: teams.cnt, status: 'ok' });
+  res.json({ version: '2.3.2', users: users.cnt, teams: teams.cnt, status: 'ok' });
 });
 
 // ── 서버 시작 ──────────────────────────────────────────────────
