@@ -3,3 +3,8 @@ uploads/
 __pycache__/
 *.pyc
 .env
+elevator.db
+elevator.db-shm
+elevator.db-wal
+uploads/
+node_modules/
