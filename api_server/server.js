@@ -377,7 +377,6 @@ const PAJU2_SEED = [
 ];
 
 // ── 자동복구 함수 ─────────────────────────────────────────────
-const crypto = require('crypto');
 function makeSiteCode(prefix) {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
 }
@@ -428,10 +427,62 @@ function autoRestoreTeam(teamName, seedData) {
   }
 }
 
+// ── 승강기 자동복구 (현장 복구 후 실행) ──────────────────────
+// PAJU1_SEED + PAJU2_SEED에 있는 elevators 수치를 기반으로 기본 승강기 생성
+function autoRestoreElevators() {
+  try {
+    const elevCount = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
+    if (elevCount.cnt >= 100) {
+      console.log(`✅ 승강기 확인: ${elevCount.cnt}대 (복구 불필요)`);
+      return;
+    }
+    console.log(`⚠️  승강기 부족 (현재 ${elevCount.cnt}대) → 자동 복구 시작...`);
+
+    const insertElev = db.prepare(`
+      INSERT OR IGNORE INTO elevators
+        (site_id, elevator_no, elevator_name, elevator_type, status)
+      VALUES (?, ?, ?, '승객용', 'normal')
+    `);
+
+    const allSeeds = [
+      ...PAJU1_SEED.map(s => ({ ...s, team: '파주1팀' })),
+      ...PAJU2_SEED.map(s => ({ ...s, team: '파주2팀' })),
+    ];
+
+    const restoreMany = db.transaction((seeds) => {
+      let total = 0;
+      for (const s of seeds) {
+        const count = s.elevators || 0;
+        if (count === 0) continue;
+
+        // 현장 ID 찾기
+        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(s.name);
+        if (!site) continue;
+
+        for (let i = 1; i <= count; i++) {
+          insertElev.run(
+            site.id,
+            `${site.id.toString().padStart(3,'0')}-E${i.toString().padStart(2,'0')}`,
+            `${s.name} ${i}호기`
+          );
+          total++;
+        }
+      }
+      return total;
+    });
+
+    const inserted = restoreMany(allSeeds);
+    console.log(`✅ 승강기 자동 복구 완료: ${inserted}대`);
+  } catch (err) {
+    console.error('❌ 승강기 자동 복구 실패:', err.message);
+  }
+}
+
 // 서버 시작 직후 실행 (자동복구)
 autoRestoreTeam('파주1팀', PAJU1_SEED);
 autoRestoreTeam('파주2팀', PAJU2_SEED);
-console.log(`✅ 자동복구 완료 → 현재 현장 수: ${db.prepare('SELECT COUNT(*) as c FROM sites').get().c}개`);
+autoRestoreElevators();
+console.log(`✅ 자동복구 완료 → 현장: ${db.prepare('SELECT COUNT(*) as c FROM sites').get().c}개, 승강기: ${db.prepare('SELECT COUNT(*) as c FROM elevators').get().c}대`);
 
 // ── 기본 관리자 계정 초기화 ──────────────────────────────────
 function hashPin(pin) {
@@ -1056,7 +1107,7 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
 app.get('/api/version', (req, res) => {
   const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
-  res.json({ version: '2.3.0', users: users.cnt, teams: teams.cnt, status: 'ok' });
+  res.json({ version: '2.3.1', users: users.cnt, teams: teams.cnt, status: 'ok' });
 });
 
 // ── 서버 시작 ──────────────────────────────────────────────────
