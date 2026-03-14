@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS sites (
   owner_name TEXT,
   owner_phone TEXT,
   manager_name TEXT,
+  team TEXT DEFAULT '',
   total_elevators INTEGER DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive','suspended')),
   contract_start DATE,
@@ -193,14 +194,33 @@ CREATE TABLE IF NOT EXISTS quarterly_checks (
 );
 `);
 
+// sites 테이블 team 컬럼 마이그레이션 (기존 DB 대응)
+try {
+  db.exec(`ALTER TABLE sites ADD COLUMN team TEXT DEFAULT ''`);
+  console.log('✅ sites.team 컬럼 추가 완료');
+} catch(e) { /* 이미 존재하면 무시 */ }
+
+// 기존 데이터의 team 값 설정 (team이 없는 현장들)
+try {
+  const emptyTeamSites = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team='' OR team IS NULL").get();
+  if (emptyTeamSites.cnt > 0) {
+    // site_id 1,2 → 파주1팀, site_id 3 → 파주2팀 (샘플 데이터 기준)
+    db.prepare("UPDATE sites SET team='파주1팀' WHERE (team='' OR team IS NULL) AND id IN (1,2)").run();
+    db.prepare("UPDATE sites SET team='파주2팀' WHERE (team='' OR team IS NULL) AND id IN (3)").run();
+    // 그 외 나머지
+    db.prepare("UPDATE sites SET team='파주1팀' WHERE team='' OR team IS NULL").run();
+    console.log('✅ 기존 현장 team 값 설정 완료');
+  }
+} catch(e) { console.log('팀 마이그레이션 오류(무시):', e.message); }
+
 // 샘플 데이터 삽입 (DB가 비어있을 경우)
 const siteCount = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
 if (siteCount.cnt === 0) {
   db.exec(`
-    INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status) VALUES
-    ('S-2024-001', '강남 현대빌딩', '서울시 강남구 테헤란로 123', '김철수', '010-1234-5678', '박영희', 3, 'active'),
-    ('S-2024-002', '서초 오피스타워', '서울시 서초구 서초대로 456', '이민준', '010-9876-5432', '최수진', 2, 'active'),
-    ('S-2024-003', '마포 주상복합', '서울시 마포구 합정로 789', '정하늘', '010-5555-7777', '윤대호', 4, 'active');
+    INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status) VALUES
+    ('S-2024-001', '강남 현대빌딩', '서울시 강남구 테헤란로 123', '김철수', '010-1234-5678', '박영희', '파주1팀', 3, 'active'),
+    ('S-2024-002', '서초 오피스타워', '서울시 서초구 서초대로 456', '이민준', '010-9876-5432', '최수진', '파주1팀', 2, 'active'),
+    ('S-2024-003', '마포 주상복합', '서울시 마포구 합정로 789', '정하늘', '010-5555-7777', '윤대호', '파주2팀', 4, 'active');
 
     INSERT INTO elevators (site_id, elevator_no, elevator_name, elevator_type, manufacturer, manufacture_year, install_date, floors_served, capacity, status) VALUES
     (1, 'EL-2020-0001', 'A동 1호기', '승객용', '현대엘리베이터', 2020, '2020-03-15', 'B2~15F', 13, 'normal'),
@@ -242,11 +262,14 @@ const defaultUsers = [
   { name: '문활영', pin: '1234', role: 'user' },
 ];
 
+// INSERT OR IGNORE: 기존 계정은 그대로 유지, 없는 계정만 추가
 const insertUser = db.prepare(`INSERT OR IGNORE INTO app_users (name, pin_hash, role, is_active, tab_permissions) VALUES (?, ?, ?, 1, '')`);
 for (const u of defaultUsers) {
   const r = insertUser.run(u.name, hashPin(u.pin), u.role);
   if (r.changes > 0) console.log(`✅ 기본 계정 생성: ${u.name} (${u.role}) / PIN: ${u.pin}`);
+  else console.log(`ℹ️ 기존 계정 유지: ${u.name}`);
 }
+console.log(`✅ 사용자 초기화 완료 - 현재 ${db.prepare('SELECT COUNT(*) as c FROM app_users').get().c}명`);
 
 // ── 헬퍼 함수 ─────────────────────────────────────────────────
 const wrap = (fn) => async (req, res, next) => {
@@ -343,52 +366,120 @@ app.post('/api/users/restore', wrap((req, res) => {
 
 // ── 대시보드 ──────────────────────────────────────────────────
 app.get('/api/dashboard', wrap((req, res) => {
-  const sitesCount = db.prepare("SELECT COUNT(*) as count FROM sites WHERE status='active'").get();
-  const elevatorsCount = db.prepare(`
-    SELECT COUNT(*) as count,
-    SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning,
-    SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault
-    FROM elevators
-  `).get();
-  const pendingIssues = db.prepare(`
-    SELECT COUNT(*) as total,
-    SUM(CASE WHEN severity='중결함' THEN 1 ELSE 0 END) as critical,
-    SUM(CASE WHEN severity='경결함' THEN 1 ELSE 0 END) as minor
-    FROM inspection_issues WHERE status != '조치완료'
-  `).get();
+  const { team } = req.query;
+  const teamFilter = (team && team.trim() !== '' && team.trim() !== '전체') ? team.trim() : null;
+
+  // 팀 필터 조건
+  const siteWhere = teamFilter ? `WHERE status='active' AND team=?` : `WHERE status='active'`;
+  const siteParams = teamFilter ? [teamFilter] : [];
+
+  const sitesCount = db.prepare(`SELECT COUNT(*) as count FROM sites ${siteWhere}`).get(...siteParams);
+
+  // 팀에 속한 사이트 ID 목록
+  let siteIds = [];
+  if (teamFilter) {
+    const teamSites = db.prepare(`SELECT id FROM sites WHERE team=? AND status='active'`).all(teamFilter);
+    siteIds = teamSites.map(s => s.id);
+  }
+
+  const siteIdIn = siteIds.length > 0 ? `IN (${siteIds.join(',')})` : null;
+
+  const elevatorsCount = siteIdIn
+    ? db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators WHERE site_id ${siteIdIn}`).get()
+    : db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators`).get();
+
+  const issueWhere = siteIdIn ? `WHERE status != '조치완료' AND site_id ${siteIdIn}` : `WHERE status != '조치완료'`;
+  const pendingIssues = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN severity='중결함' THEN 1 ELSE 0 END) as critical, SUM(CASE WHEN severity='경결함' THEN 1 ELSE 0 END) as minor FROM inspection_issues ${issueWhere}`).get();
+
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const quarter = Math.ceil((now.getMonth() + 1) / 3);
 
-  const monthlyStats = db.prepare(
-    "SELECT COUNT(*) as total, SUM(CASE WHEN status='완료' THEN 1 ELSE 0 END) as done FROM monthly_checks WHERE check_year=? AND check_month=?"
-  ).get(yyyy, parseInt(mm));
-  const quarterlyStats = db.prepare(
-    "SELECT COUNT(*) as total, SUM(CASE WHEN status='완료' THEN 1 ELSE 0 END) as done FROM quarterly_checks WHERE check_year=? AND quarter=?"
-  ).get(yyyy, quarter);
+  const mcWhere = siteIdIn ? `WHERE check_year=? AND check_month=? AND site_id ${siteIdIn}` : `WHERE check_year=? AND check_month=?`;
+  const qcWhere = siteIdIn ? `WHERE check_year=? AND quarter=? AND site_id ${siteIdIn}` : `WHERE check_year=? AND quarter=?`;
+
+  const monthlyStats = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN status='완료' THEN 1 ELSE 0 END) as done FROM monthly_checks ${mcWhere}`).get(yyyy, parseInt(mm));
+  const quarterlyStats = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN status='완료' THEN 1 ELSE 0 END) as done FROM quarterly_checks ${qcWhere}`).get(yyyy, quarter);
+
+  const riWhere = siteIdIn ? `WHERE ii.status != '조치완료' AND ii.site_id ${siteIdIn}` : `WHERE ii.status != '조치완료'`;
   const recentIssues = db.prepare(`
     SELECT ii.id, ii.issue_description, ii.severity, ii.status, ii.deadline,
            s.site_name, e.elevator_name
     FROM inspection_issues ii
     JOIN sites s ON s.id=ii.site_id
     JOIN elevators e ON e.id=ii.elevator_id
-    WHERE ii.status != '조치완료'
+    ${riWhere}
     ORDER BY CASE ii.severity WHEN '중결함' THEN 1 WHEN '경결함' THEN 2 ELSE 3 END,
              ii.deadline ASC LIMIT 5
   `).all();
 
-  res.json({ success: true, data: { sites: sitesCount?.count || 0, elevators: elevatorsCount, pendingIssues, monthlyStats, quarterlyStats, recentIssues } });
+  // 팀별 통계 (전체 보기 시)
+  const teamStats = db.prepare(`
+    SELECT s.team,
+      COUNT(DISTINCT s.id) as sites,
+      COUNT(e.id) as elevators,
+      SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault,
+      SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning
+    FROM sites s
+    LEFT JOIN elevators e ON e.site_id=s.id
+    WHERE s.team != '' AND s.team IS NOT NULL AND s.status='active'
+    GROUP BY s.team
+    ORDER BY s.team
+  `).all();
+
+  // 30일 이내 검사 예정
+  const today = new Date().toISOString().split('T')[0];
+  const future = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+  const inspecWhere = siteIdIn
+    ? `WHERE i.next_inspection_date BETWEEN ? AND ? AND i.site_id ${siteIdIn}`
+    : `WHERE i.next_inspection_date BETWEEN ? AND ?`;
+  const upcomingInspections = db.prepare(`SELECT COUNT(*) as count FROM inspections i ${inspecWhere}`).get(today, future);
+  const upcomingInspectionList = db.prepare(`
+    SELECT i.*, s.site_name, e.elevator_name FROM inspections i
+    JOIN sites s ON s.id=i.site_id
+    JOIN elevators e ON e.id=i.elevator_id
+    ${inspecWhere}
+    ORDER BY i.next_inspection_date ASC LIMIT 10
+  `).all(today, future);
+
+  res.json({ success: true, data: {
+    sites: sitesCount?.count || 0,
+    elevators: elevatorsCount,
+    pendingIssues,
+    monthlyStats,
+    quarterlyStats,
+    recentIssues,
+    teamStats,
+    upcomingInspections: upcomingInspections?.count || 0,
+    upcomingInspectionList
+  }});
+}));
+
+// ── 팀(Teams) ─────────────────────────────────────────────────
+// GET /api/teams - 현장에 사용된 팀 목록 조회
+app.get('/api/teams', wrap((req, res) => {
+  const rows = db.prepare(`SELECT DISTINCT team FROM sites WHERE team IS NOT NULL AND team != '' ORDER BY team ASC`).all();
+  const teams = rows.map(r => r.team);
+  res.json({ success: true, results: teams });
+}));
+
+// POST /api/teams - 팀 추가 (현장에 팀 지정 시 사용, 별도 테이블 없이 sites에서 관리)
+app.post('/api/teams', wrap((req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ success: false, error: '팀 이름이 필요합니다' });
+  res.json({ success: true, name: name.trim() });
 }));
 
 // ── 현장(Sites) ───────────────────────────────────────────────
 app.get('/api/sites', wrap((req, res) => {
-  const { search, status } = req.query;
+  const { search, status, team } = req.query;
   let sql = `SELECT s.*, COUNT(e.id) as elevator_count FROM sites s LEFT JOIN elevators e ON e.site_id=s.id`;
   const params = [];
   const where = [];
   if (search) { where.push("(s.site_name LIKE ? OR s.site_code LIKE ? OR s.address LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
   if (status) { where.push("s.status=?"); params.push(status); }
+  if (team && team !== '전체') { where.push("s.team=?"); params.push(team); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' GROUP BY s.id ORDER BY s.created_at DESC';
   res.json({ success: true, results: db.prepare(sql).all(...params) });
@@ -401,16 +492,16 @@ app.get('/api/sites/:id', wrap((req, res) => {
 }));
 
 app.post('/api/sites', wrap((req, res) => {
-  const { site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes } = req.body;
-  const r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null);
+  const { site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes } = req.body;
+  const r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, team || '', total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null);
   res.json({ success: true, id: r.lastInsertRowid });
 }));
 
 app.put('/api/sites/:id', wrap((req, res) => {
-  const { site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes } = req.body;
-  db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, req.params.id);
+  const { site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes } = req.body;
+  db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, team=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, team || '', total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, req.params.id);
   res.json({ success: true });
 }));
 
@@ -780,7 +871,8 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
 // ── 서버 버전 확인 ─────────────────────────────────────────────
 app.get('/api/version', (req, res) => {
   const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
-  res.json({ version: '2.1.0', users: users.cnt, status: 'ok' });
+  const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
+  res.json({ version: '2.2.0', users: users.cnt, teams: teams.cnt, status: 'ok' });
 });
 
 // ── 서버 시작 ──────────────────────────────────────────────────
