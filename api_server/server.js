@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 const multer = require('multer');
+const crypto = require('crypto');
 
 // 파일 업로드 설정 (메모리 저장, 최대 20MB) - PDF 및 이미지 모두 허용
 const upload = multer({
@@ -613,7 +614,7 @@ app.post('/api/users/restore', wrap((req, res) => {
   }
   // 없으면 PIN 없이 추가 (PIN은 '0000' 임시값 - 나중에 관리자가 재설정)
   const r = db.prepare(`INSERT INTO app_users (name, pin_hash, role, is_active, tab_permissions) VALUES (?,?,?,?,?)`)
-    .run(name.trim(), require('crypto').createHash('sha256').update('0000').digest('hex'),
+    .run(name.trim(), crypto.createHash('sha256').update('0000').digest('hex'),
          role || 'user', is_active ?? 1, tab_permissions || '');
   res.json({ success: true, restored: true, id: r.lastInsertRowid });
 }));
