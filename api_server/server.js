@@ -644,18 +644,16 @@ app.get('/api/dashboard', wrap((req, res) => {
 
   const siteIdIn = siteIds.length > 0 ? `IN (${siteIds.join(',')})` : null;
 
-  // 승강기 대수: elevators 테이블 COUNT + total_elevators 합산 중 큰 값
+  // 승강기 대수: elevators 테이블 실제 COUNT만 사용
   let elevatorsCount;
   if (siteIdIn) {
-    const realCount = db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators WHERE site_id ${siteIdIn}`).get();
-    const totalSum = db.prepare(`SELECT COALESCE(SUM(total_elevators),0) as total FROM sites WHERE id ${siteIdIn} AND status='active'`).get();
-    elevatorsCount = { count: Math.max(realCount.count || 0, totalSum.total || 0), warning: realCount.warning || 0, fault: realCount.fault || 0 };
+    elevatorsCount = db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators WHERE site_id ${siteIdIn}`).get();
+    elevatorsCount = { count: elevatorsCount.count || 0, warning: elevatorsCount.warning || 0, fault: elevatorsCount.fault || 0 };
   } else if (effectiveTeamFilter && !siteIdIn) {
     elevatorsCount = { count: 0, warning: 0, fault: 0 };
   } else {
-    const realCount = db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators`).get();
-    const totalSum = db.prepare(`SELECT COALESCE(SUM(total_elevators),0) as total FROM sites WHERE status='active'`).get();
-    elevatorsCount = { count: Math.max(realCount.count || 0, totalSum.total || 0), warning: realCount.warning || 0, fault: realCount.fault || 0 };
+    elevatorsCount = db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators`).get();
+    elevatorsCount = { count: elevatorsCount.count || 0, warning: elevatorsCount.warning || 0, fault: elevatorsCount.fault || 0 };
   }
 
   const issueWhere = siteIdIn ? `WHERE status != '조치완료' AND site_id ${siteIdIn}` : `WHERE status != '조치완료'`;
@@ -684,14 +682,13 @@ app.get('/api/dashboard', wrap((req, res) => {
              ii.deadline ASC LIMIT 5
   `).all();
 
-  // 팀별 통계 (team 컬럼 있을 때만)
+  // 팀별 통계 (team 컬럼 있을 때만) - elevators 실제 COUNT 사용
   let teamStats = [];
   if (hasTeamCol) {
     teamStats = db.prepare(`
       SELECT s.team,
         COUNT(DISTINCT s.id) as sites,
-        COALESCE(SUM(s.total_elevators),0) as elevators,
-        COUNT(DISTINCT e.id) as registered_elevators,
+        COUNT(DISTINCT e.id) as elevators,
         COUNT(CASE WHEN e.status='fault' THEN 1 END) as fault,
         COUNT(CASE WHEN e.status='warning' THEN 1 END) as warning,
         (SELECT COUNT(*) FROM inspection_issues ii2
@@ -737,18 +734,48 @@ app.get('/api/dashboard', wrap((req, res) => {
 }));
 
 // ── 팀(Teams) ─────────────────────────────────────────────────
-// GET /api/teams - 현장에 사용된 팀 목록 조회
+// GET /api/teams - 현장에 사용된 팀 + 추가된 팀 모두 반환
 app.get('/api/teams', wrap((req, res) => {
-  const rows = db.prepare(`SELECT DISTINCT team FROM sites WHERE team IS NOT NULL AND team != '' ORDER BY team ASC`).all();
-  const teams = rows.map(r => r.team);
+  const hasTCol = db.prepare("PRAGMA table_info(sites)").all().map(c=>c.name).includes('team');
+  let teams = [];
+  if (hasTCol) {
+    const rows = db.prepare(`SELECT DISTINCT team FROM sites WHERE team IS NOT NULL AND team != '' ORDER BY team ASC`).all();
+    teams = rows.map(r => r.team);
+  }
+  // 메모리에 추가된 커스텀 팀도 포함
+  for (const t of _customTeams) {
+    if (!teams.includes(t)) teams.push(t);
+  }
+  teams.sort();
   res.json({ success: true, results: teams });
 }));
 
-// POST /api/teams - 팀 추가 (현장에 팀 지정 시 사용, 별도 테이블 없이 sites에서 관리)
+// POST /api/teams - 새 팀 이름 등록 (teams 전용 테이블 없이 별도 관리 테이블 사용)
+// teams 테이블이 없으므로 메모리 Set으로 관리 + sites에서 사용된 팀 자동 포함
+const _customTeams = new Set(); // 서버 재시작 시 초기화 (sites 테이블에서 복원)
+try {
+  const existing = db.prepare(`SELECT DISTINCT team FROM sites WHERE team IS NOT NULL AND team != ''`).all();
+  existing.forEach(r => _customTeams.add(r.team));
+} catch(e) {}
+
 app.post('/api/teams', wrap((req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ success: false, error: '팀 이름이 필요합니다' });
-  res.json({ success: true, name: name.trim() });
+  const trimmed = name.trim();
+  _customTeams.add(trimmed);
+  res.json({ success: true, name: trimmed });
+}));
+
+// DELETE /api/teams/:name - 팀 삭제 (해당 팀 현장이 없을 때만)
+app.delete('/api/teams/:name', wrap((req, res) => {
+  const teamName = decodeURIComponent(req.params.name);
+  const hasTCol = db.prepare("PRAGMA table_info(sites)").all().map(c=>c.name).includes('team');
+  if (hasTCol) {
+    const inUse = db.prepare(`SELECT COUNT(*) as cnt FROM sites WHERE team=?`).get(teamName);
+    if (inUse.cnt > 0) return res.status(400).json({ success: false, error: `해당 팀을 사용 중인 현장이 ${inUse.cnt}개 있습니다` });
+  }
+  _customTeams.delete(teamName);
+  res.json({ success: true });
 }));
 
 // ── 현장(Sites) ───────────────────────────────────────────────
@@ -1166,7 +1193,7 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
 app.get('/api/version', (req, res) => {
   const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
-  res.json({ version: '2.3.2', users: users.cnt, teams: teams.cnt, status: 'ok' });
+  res.json({ version: '2.5.0', users: users.cnt, teams: teams.cnt, status: 'ok' });
 });
 
 // ── 서버 시작 ──────────────────────────────────────────────────
