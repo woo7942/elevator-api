@@ -194,22 +194,28 @@ CREATE TABLE IF NOT EXISTS quarterly_checks (
 );
 `);
 
-// sites 테이블 team 컬럼 마이그레이션 (기존 DB 대응)
-try {
-  db.exec(`ALTER TABLE sites ADD COLUMN team TEXT DEFAULT ''`);
-  console.log('✅ sites.team 컬럼 추가 완료');
-} catch(e) { /* 이미 존재하면 무시 */ }
+// sites 테이블 team 컬럼 마이그레이션 (기존 DB 대응) - 강제 확인 후 추가
+(function ensureTeamColumn() {
+  try {
+    const cols = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+    if (!cols.includes('team')) {
+      db.exec(`ALTER TABLE sites ADD COLUMN team TEXT DEFAULT ''`);
+      console.log('✅ sites.team 컬럼 추가 완료');
+    } else {
+      console.log('ℹ️ sites.team 컬럼 이미 존재');
+    }
+  } catch(e) {
+    console.log('team 컬럼 마이그레이션 오류:', e.message);
+  }
+})();
 
-// 기존 데이터의 team 값 설정 (team이 없는 현장들)
+// 기존 데이터의 team 값 설정 (team이 비어있는 현장들)
 try {
   const emptyTeamSites = db.prepare("SELECT COUNT(*) as cnt FROM sites WHERE team='' OR team IS NULL").get();
   if (emptyTeamSites.cnt > 0) {
-    // site_id 1,2 → 파주1팀, site_id 3 → 파주2팀 (샘플 데이터 기준)
-    db.prepare("UPDATE sites SET team='파주1팀' WHERE (team='' OR team IS NULL) AND id IN (1,2)").run();
-    db.prepare("UPDATE sites SET team='파주2팀' WHERE (team='' OR team IS NULL) AND id IN (3)").run();
-    // 그 외 나머지
+    // 모든 현장에 파주1팀 기본값 설정 (기존 데이터 대응)
     db.prepare("UPDATE sites SET team='파주1팀' WHERE team='' OR team IS NULL").run();
-    console.log('✅ 기존 현장 team 값 설정 완료');
+    console.log(`✅ 기존 현장 ${emptyTeamSites.cnt}개 team='파주1팀' 기본값 설정 완료`);
   }
 } catch(e) { console.log('팀 마이그레이션 오류(무시):', e.message); }
 
@@ -369,25 +375,53 @@ app.get('/api/dashboard', wrap((req, res) => {
   const { team } = req.query;
   const teamFilter = (team && team.trim() !== '' && team.trim() !== '전체') ? team.trim() : null;
 
-  // 팀 필터 조건
-  const siteWhere = teamFilter ? `WHERE status='active' AND team=?` : `WHERE status='active'`;
-  const siteParams = teamFilter ? [teamFilter] : [];
+  // team 컬럼 존재 여부 확인 (안전하게 처리)
+  const siteTableCols = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+  const hasTeamCol = siteTableCols.includes('team');
 
-  const sitesCount = db.prepare(`SELECT COUNT(*) as count FROM sites ${siteWhere}`).get(...siteParams);
+  // team 컬럼이 없으면 teamFilter 무효화
+  const effectiveTeamFilter = hasTeamCol ? teamFilter : null;
+  const effectiveSiteWhere = effectiveTeamFilter ? `WHERE status='active' AND team=?` : `WHERE status='active'`;
+  const effectiveSiteParams = effectiveTeamFilter ? [effectiveTeamFilter] : [];
+
+  const sitesCount = db.prepare(`SELECT COUNT(*) as count FROM sites ${effectiveSiteWhere}`).get(...effectiveSiteParams);
 
   // 팀에 속한 사이트 ID 목록
   let siteIds = [];
-  if (teamFilter) {
-    const teamSites = db.prepare(`SELECT id FROM sites WHERE team=? AND status='active'`).all(teamFilter);
+  if (effectiveTeamFilter && hasTeamCol) {
+    const teamSites = db.prepare(`SELECT id FROM sites WHERE team=? AND status='active'`).all(effectiveTeamFilter);
     siteIds = teamSites.map(s => s.id);
   }
 
   const siteIdIn = siteIds.length > 0 ? `IN (${siteIds.join(',')})` : null;
 
-  const elevatorsCount = siteIdIn
-    ? db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators WHERE site_id ${siteIdIn}`).get()
-    : db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators`).get();
+  // 승강기 대수: elevators 테이블 실제 count + total_elevators 합산 둘 다 제공
+  let elevatorsCount;
+  if (siteIdIn) {
+    // 팀 필터 있을 때: 해당 site_id의 elevators 테이블 count
+    const realCount = db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators WHERE site_id ${siteIdIn}`).get();
+    // total_elevators 합산 (elevators 테이블에 없는 호기 포함)
+    const totalSum = db.prepare(`SELECT COALESCE(SUM(total_elevators),0) as total FROM sites WHERE id ${siteIdIn} AND status='active'`).get();
+    elevatorsCount = {
+      count: Math.max(realCount.count || 0, totalSum.total || 0),
+      warning: realCount.warning || 0,
+      fault: realCount.fault || 0
+    };
+  } else if (effectiveTeamFilter && !siteIdIn) {
+    // 팀 필터 있는데 해당 팀 사이트 없는 경우
+    elevatorsCount = { count: 0, warning: 0, fault: 0 };
+  } else {
+    // 전체: elevators 테이블 count와 total_elevators 합산 중 큰 값
+    const realCount = db.prepare(`SELECT COUNT(*) as count, SUM(CASE WHEN status='warning' THEN 1 ELSE 0 END) as warning, SUM(CASE WHEN status='fault' THEN 1 ELSE 0 END) as fault FROM elevators`).get();
+    const totalSum = db.prepare(`SELECT COALESCE(SUM(total_elevators),0) as total FROM sites WHERE status='active'`).get();
+    elevatorsCount = {
+      count: Math.max(realCount.count || 0, totalSum.total || 0),
+      warning: realCount.warning || 0,
+      fault: realCount.fault || 0
+    };
+  }
 
+  // issueWhere - effectiveTeamFilter 기준으로 처리
   const issueWhere = siteIdIn ? `WHERE status != '조치완료' AND site_id ${siteIdIn}` : `WHERE status != '조치완료'`;
   const pendingIssues = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN severity='중결함' THEN 1 ELSE 0 END) as critical, SUM(CASE WHEN severity='경결함' THEN 1 ELSE 0 END) as minor FROM inspection_issues ${issueWhere}`).get();
 
@@ -414,19 +448,29 @@ app.get('/api/dashboard', wrap((req, res) => {
              ii.deadline ASC LIMIT 5
   `).all();
 
-  // 팀별 통계 (전체 보기 시)
-  const teamStats = db.prepare(`
-    SELECT s.team,
-      COUNT(DISTINCT s.id) as sites,
-      COUNT(e.id) as elevators,
-      SUM(CASE WHEN e.status='fault' THEN 1 ELSE 0 END) as fault,
-      SUM(CASE WHEN e.status='warning' THEN 1 ELSE 0 END) as warning
-    FROM sites s
-    LEFT JOIN elevators e ON e.site_id=s.id
-    WHERE s.team != '' AND s.team IS NOT NULL AND s.status='active'
-    GROUP BY s.team
-    ORDER BY s.team
-  `).all();
+  // 팀별 통계 (team 컬럼 있을 때만)
+  let teamStats = [];
+  if (hasTeamCol) {
+    teamStats = db.prepare(`
+      SELECT s.team,
+        COUNT(DISTINCT s.id) as sites,
+        COALESCE(SUM(s.total_elevators),0) as elevators,
+        COUNT(DISTINCT e.id) as registered_elevators,
+        COUNT(CASE WHEN e.status='fault' THEN 1 END) as fault,
+        COUNT(CASE WHEN e.status='warning' THEN 1 END) as warning,
+        (SELECT COUNT(*) FROM inspection_issues ii2
+          WHERE ii2.site_id IN (SELECT id FROM sites s3 WHERE s3.team=s.team AND s3.status='active')
+          AND ii2.status != '조치완료') as pending_issues,
+        (SELECT COUNT(*) FROM inspection_issues ii3
+          WHERE ii3.site_id IN (SELECT id FROM sites s4 WHERE s4.team=s.team AND s4.status='active')
+          AND ii3.status != '조치완료' AND ii3.severity='중결함') as critical_issues
+      FROM sites s
+      LEFT JOIN elevators e ON e.site_id=s.id
+      WHERE s.team != '' AND s.team IS NOT NULL AND s.status='active'
+      GROUP BY s.team
+      ORDER BY s.team
+    `).all();
+  }
 
   // 30일 이내 검사 예정
   const today = new Date().toISOString().split('T')[0];
@@ -474,12 +518,14 @@ app.post('/api/teams', wrap((req, res) => {
 // ── 현장(Sites) ───────────────────────────────────────────────
 app.get('/api/sites', wrap((req, res) => {
   const { search, status, team } = req.query;
+  const siteCols2 = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+  const hasTeam2 = siteCols2.includes('team');
   let sql = `SELECT s.*, COUNT(e.id) as elevator_count FROM sites s LEFT JOIN elevators e ON e.site_id=s.id`;
   const params = [];
   const where = [];
   if (search) { where.push("(s.site_name LIKE ? OR s.site_code LIKE ? OR s.address LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
   if (status) { where.push("s.status=?"); params.push(status); }
-  if (team && team !== '전체') { where.push("s.team=?"); params.push(team); }
+  if (hasTeam2 && team && team !== '전체') { where.push("s.team=?"); params.push(team); }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' GROUP BY s.id ORDER BY s.created_at DESC';
   res.json({ success: true, results: db.prepare(sql).all(...params) });
@@ -493,15 +539,30 @@ app.get('/api/sites/:id', wrap((req, res) => {
 
 app.post('/api/sites', wrap((req, res) => {
   const { site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes } = req.body;
-  const r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, team || '', total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null);
+  const colsCheck = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+  const hasTeamCol2 = colsCheck.includes('team');
+  let r;
+  if (hasTeamCol2) {
+    r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, team || '', total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null);
+  } else {
+    r = db.prepare(`INSERT INTO sites (site_code, site_name, address, owner_name, owner_phone, manager_name, total_elevators, status, contract_start, contract_end, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null);
+  }
   res.json({ success: true, id: r.lastInsertRowid });
 }));
 
 app.put('/api/sites/:id', wrap((req, res) => {
   const { site_code, site_name, address, owner_name, owner_phone, manager_name, team, total_elevators, status, contract_start, contract_end, notes } = req.body;
-  db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, team=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-    .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, team || '', total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, req.params.id);
+  const colsCheck2 = db.prepare("PRAGMA table_info(sites)").all().map(c => c.name);
+  const hasTeamCol3 = colsCheck2.includes('team');
+  if (hasTeamCol3) {
+    db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, team=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, team || '', total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, req.params.id);
+  } else {
+    db.prepare(`UPDATE sites SET site_code=?, site_name=?, address=?, owner_name=?, owner_phone=?, manager_name=?, total_elevators=?, status=?, contract_start=?, contract_end=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(site_code, site_name, address, owner_name || null, owner_phone || null, manager_name || null, total_elevators || 0, status || 'active', contract_start || null, contract_end || null, notes || null, req.params.id);
+  }
   res.json({ success: true });
 }));
 
@@ -872,7 +933,7 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
 app.get('/api/version', (req, res) => {
   const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
-  res.json({ version: '2.2.0', users: users.cnt, teams: teams.cnt, status: 'ok' });
+  res.json({ version: '2.4.0', users: users.cnt, teams: teams.cnt, status: 'ok' });
 });
 
 // ── 서버 시작 ──────────────────────────────────────────────────
