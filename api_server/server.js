@@ -402,15 +402,10 @@ function makeSiteCode(prefix) {
 }
 
 function autoRestoreTeam(teamName, seedData) {
+  // ⚠️ 사용자가 추가/수정한 데이터를 절대 삭제하거나 덮어쓰지 않음
+  // SEED에 있는 현장명이 이미 DB에 없을 때만 INSERT (INSERT OR IGNORE)
+  // 기존 데이터는 일절 변경 없음
   try {
-    const count = db.prepare(`SELECT COUNT(*) as cnt FROM sites WHERE team=?`).get(teamName);
-    const threshold = teamName === '파주1팀' ? 100 : 45;
-    if (count.cnt >= threshold) {
-      console.log(`✅ ${teamName} 확인: ${count.cnt}개 (복구 불필요)`);
-      return;
-    }
-    console.log(`⚠️  ${teamName} 부족 (현재 ${count.cnt}개) → 자동 복구 시작...`);
-
     const insertStmt = db.prepare(`
       INSERT OR IGNORE INTO sites
         (site_code, site_name, address, owner_name, owner_phone,
@@ -418,10 +413,16 @@ function autoRestoreTeam(teamName, seedData) {
       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
     `);
 
+    // site_name에 UNIQUE 제약이 없으므로 이름으로 직접 체크
+    const existsStmt = db.prepare(`SELECT id FROM sites WHERE site_name=? AND team=? LIMIT 1`);
+
     const insertMany = db.transaction((seeds) => {
       let n = 0;
       const prefix = teamName === '파주1팀' ? 'P1' : 'P2';
       for (const s of seeds) {
+        // 이미 같은 이름+팀의 현장이 있으면 건너뜀 (사용자 데이터 보호)
+        const existing = existsStmt.get(s.name, teamName);
+        if (existing) continue;
         const code = makeSiteCode(prefix);
         insertStmt.run(
           code,
@@ -441,23 +442,22 @@ function autoRestoreTeam(teamName, seedData) {
     });
 
     const inserted = insertMany(seedData);
-    console.log(`✅ ${teamName} 자동 복구 완료: ${inserted}개`);
+    const total = db.prepare(`SELECT COUNT(*) as cnt FROM sites WHERE team=?`).get(teamName).cnt;
+    if (inserted > 0) {
+      console.log(`✅ ${teamName} 복구: ${inserted}개 추가 (총 ${total}개)`);
+    } else {
+      console.log(`✅ ${teamName} 확인: ${total}개 (모두 존재)`);
+    }
   } catch (err) {
     console.error(`❌ ${teamName} 자동 복구 실패:`, err.message);
   }
 }
 
 // ── 승강기 자동복구 (현장 복구 후 실행) ──────────────────────
-// PAJU1_SEED + PAJU2_SEED에 있는 elevators 수치를 기반으로 기본 승강기 생성
+// 사용자가 등록한 승강기는 절대 건드리지 않음
+// 해당 현장에 승강기가 0개인 경우에만 SEED 기준으로 기본 승강기 생성
 function autoRestoreElevators() {
   try {
-    const elevCount = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
-    if (elevCount.cnt >= 100) {
-      console.log(`✅ 승강기 확인: ${elevCount.cnt}대 (복구 불필요)`);
-      return;
-    }
-    console.log(`⚠️  승강기 부족 (현재 ${elevCount.cnt}대) → 자동 복구 시작...`);
-
     const insertElev = db.prepare(`
       INSERT OR IGNORE INTO elevators
         (site_id, elevator_no, elevator_name, elevator_type, status)
@@ -472,14 +472,19 @@ function autoRestoreElevators() {
     const restoreMany = db.transaction((seeds) => {
       let total = 0;
       for (const s of seeds) {
-        const count = s.elevators || 0;
-        if (count === 0) continue;
+        const seedCount = s.elevators || 0;
+        if (seedCount === 0) continue;
 
         // 현장 ID 찾기
         const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(s.name);
         if (!site) continue;
 
-        for (let i = 1; i <= count; i++) {
+        // ⚠️ 해당 현장에 이미 승강기가 있으면 건드리지 않음 (사용자 데이터 보호)
+        const existingElev = db.prepare('SELECT COUNT(*) as cnt FROM elevators WHERE site_id=?').get(site.id);
+        if (existingElev.cnt > 0) continue;
+
+        // 승강기가 없는 현장에만 SEED 기준으로 기본 생성
+        for (let i = 1; i <= seedCount; i++) {
           insertElev.run(
             site.id,
             `${site.id.toString().padStart(3,'0')}-E${i.toString().padStart(2,'0')}`,
@@ -492,7 +497,12 @@ function autoRestoreElevators() {
     });
 
     const inserted = restoreMany(allSeeds);
-    console.log(`✅ 승강기 자동 복구 완료: ${inserted}대`);
+    const elevTotal = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get().cnt;
+    if (inserted > 0) {
+      console.log(`✅ 승강기 복구: ${inserted}대 추가 (총 ${elevTotal}대)`);
+    } else {
+      console.log(`✅ 승강기 확인: ${elevTotal}대 (모두 존재)`);
+    }
   } catch (err) {
     console.error('❌ 승강기 자동 복구 실패:', err.message);
   }
@@ -1193,8 +1203,133 @@ app.post('/api/image/parse', upload.array('images', 10), async (req, res) => {
 app.get('/api/version', (req, res) => {
   const users = db.prepare('SELECT COUNT(*) as cnt FROM app_users').get();
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
-  res.json({ version: '2.5.0', users: users.cnt, teams: teams.cnt, status: 'ok' });
+  const sites = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
+  const elevators = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
+  res.json({ version: '2.6.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
 });
+
+// ── DB 전체 백업 (JSON) ─────────────────────────────────────────
+// GET /api/backup → 전체 DB를 JSON으로 반환 (앱에서 로컬 저장 가능)
+app.get('/api/backup', wrap((req, res) => {
+  const data = {
+    version: '2.6.0',
+    timestamp: new Date().toISOString(),
+    sites: db.prepare('SELECT * FROM sites').all(),
+    elevators: db.prepare('SELECT * FROM elevators').all(),
+    inspections: db.prepare('SELECT * FROM inspections').all(),
+    inspection_issues: db.prepare('SELECT * FROM inspection_issues').all(),
+    monthly_checks: db.prepare('SELECT * FROM monthly_checks').all(),
+    quarterly_checks: db.prepare('SELECT * FROM quarterly_checks').all(),
+  };
+  res.json({ success: true, data });
+}));
+
+// ── DB 복원 (JSON → DB) ────────────────────────────────────────
+// POST /api/restore { data: { sites, elevators, ... } }
+// 기존 SEED 데이터는 유지하고 백업 데이터를 병합 (site_name 기준 중복 방지)
+app.post('/api/restore', wrap((req, res) => {
+  const { data } = req.body;
+  if (!data) return res.status(400).json({ success: false, error: '백업 데이터가 없습니다' });
+
+  const result = { sites: 0, elevators: 0, inspections: 0, issues: 0, monthly: 0, quarterly: 0 };
+
+  const restoreTx = db.transaction(() => {
+    // 현장 복원 (site_name 중복이면 업데이트, 없으면 삽입)
+    if (data.sites) {
+      const insertSite = db.prepare(`INSERT OR IGNORE INTO sites
+        (site_code, site_name, address, owner_name, owner_phone, manager_name, team,
+         total_elevators, status, contract_start, contract_end, notes, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+      for (const s of data.sites) {
+        const exists = db.prepare('SELECT id FROM sites WHERE site_name=? AND (team=? OR (team IS NULL AND ? IS NULL))').get(s.site_name, s.team, s.team);
+        if (!exists) {
+          insertSite.run(s.site_code, s.site_name, s.address, s.owner_name, s.owner_phone,
+            s.manager_name, s.team||'', s.total_elevators||0, s.status||'active',
+            s.contract_start, s.contract_end, s.notes, s.created_at, s.updated_at);
+          result.sites++;
+        }
+      }
+    }
+
+    // 승강기 복원 (elevator_no + site_id 조합으로 중복 방지)
+    if (data.elevators) {
+      const insertElev = db.prepare(`INSERT OR IGNORE INTO elevators
+        (site_id, elevator_no, elevator_name, elevator_type, manufacturer, install_date,
+         floors_served, capacity, status, notes, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+      for (const e of data.elevators) {
+        // site_id는 복원된 현장의 새 id로 매핑 필요 - 일단 site_name으로 찾기
+        const site = data.sites?.find(s => s.id === e.site_id);
+        if (!site) continue;
+        const newSite = db.prepare('SELECT id FROM sites WHERE site_name=?').get(site.site_name);
+        if (!newSite) continue;
+        const exists = db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(newSite.id, e.elevator_no);
+        if (!exists) {
+          insertElev.run(newSite.id, e.elevator_no, e.elevator_name, e.elevator_type||'승객용',
+            e.manufacturer, e.install_date, e.floors_served, e.capacity,
+            e.status||'normal', e.notes, e.created_at, e.updated_at);
+          result.elevators++;
+        }
+      }
+    }
+
+    // 지적사항 복원
+    if (data.inspection_issues) {
+      const insertIssue = db.prepare(`INSERT OR IGNORE INTO inspection_issues
+        (inspection_id, elevator_id, site_id, issue_type, severity, description,
+         photo_path, status, notes, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+      for (const i of data.inspection_issues) {
+        const exists = db.prepare('SELECT id FROM inspection_issues WHERE site_id=? AND elevator_id=? AND created_at=?')
+          .get(i.site_id, i.elevator_id, i.created_at);
+        if (!exists) {
+          insertIssue.run(i.inspection_id, i.elevator_id, i.site_id, i.issue_type,
+            i.severity, i.description, i.photo_path, i.status||'미조치', i.notes,
+            i.created_at, i.updated_at);
+          result.issues++;
+        }
+      }
+    }
+
+    // 월간점검 복원
+    if (data.monthly_checks) {
+      const insertMC = db.prepare(`INSERT OR IGNORE INTO monthly_checks
+        (site_id, elevator_id, check_year, check_month, status, checker_name,
+         check_date, notes, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`);
+      for (const m of data.monthly_checks) {
+        const exists = db.prepare('SELECT id FROM monthly_checks WHERE site_id=? AND elevator_id=? AND check_year=? AND check_month=?')
+          .get(m.site_id, m.elevator_id, m.check_year, m.check_month);
+        if (!exists) {
+          insertMC.run(m.site_id, m.elevator_id, m.check_year, m.check_month,
+            m.status, m.checker_name, m.check_date, m.notes, m.created_at);
+          result.monthly++;
+        }
+      }
+    }
+
+    // 분기점검 복원
+    if (data.quarterly_checks) {
+      const insertQC = db.prepare(`INSERT OR IGNORE INTO quarterly_checks
+        (site_id, elevator_id, check_year, check_quarter, status, checker_name,
+         check_date, notes, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`);
+      for (const q of data.quarterly_checks) {
+        const exists = db.prepare('SELECT id FROM quarterly_checks WHERE site_id=? AND elevator_id=? AND check_year=? AND check_quarter=?')
+          .get(q.site_id, q.elevator_id, q.check_year, q.check_quarter);
+        if (!exists) {
+          insertQC.run(q.site_id, q.elevator_id, q.check_year, q.check_quarter,
+            q.status, q.checker_name, q.check_date, q.notes, q.created_at);
+          result.quarterly++;
+        }
+      }
+    }
+  });
+
+  restoreTx();
+  console.log(`✅ DB 복원 완료:`, result);
+  res.json({ success: true, restored: result });
+}));
 
 // ── 서버 시작 ──────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
