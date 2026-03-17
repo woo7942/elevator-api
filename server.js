@@ -224,295 +224,292 @@ try {
 } catch(e) { console.log('팀 마이그레이션 오류(무시):', e.message); }
 
 // ════════════════════════════════════════════════════════════════
-// 파주1팀 / 파주2팀 완전 시드 데이터 (서버 재시작 시 자동복구)
+// seed_data.json 기반 자동복구 (Render 재배포 후 데이터 복원)
 // ════════════════════════════════════════════════════════════════
-const PAJU1_SEED = [
-  {name:'교하대원효성아파트',address:'경기도 파주시 청석로 300',phone:null,elevators:45},
-  {name:'교하토우프라자',address:'경기도 파주시 숲속노을로 265',phone:'010-5345-4832',elevators:1},
-  {name:'진원빌딩',address:'경기도 파주시 숲속노을로 275',phone:'010-8708-4034',elevators:2},
-  {name:'대경주차빌딩',address:'경기도 파주시 청석로 307',phone:'010-9140-5450',elevators:1},
-  {name:'물푸레도서관',address:'경기도 파주시 청석로 360',phone:'010-6623-5351',elevators:1},
-  {name:'엘엠시트',address:'경기도 파주시 돌단풍길64',phone:'010-9168-3310',elevators:1},
-  {name:'새중앙교회',address:'경기도 파주시 노을빛로38',phone:'010-4157-8807',elevators:1},
-  {name:'린타워',address:'경기도 파주시 책향기로277',phone:'010-5730-5382',elevators:1},
-  {name:'교하동산14-1',address:'경기도 파주시 천정구로201',phone:'010-5352-1440',elevators:1},
-  {name:'문발동573-3',address:'경기도 파주시 꽃창포길49',phone:'010-8776-9196',elevators:1},
-  {name:'보성팰리스',address:'경기도 파주시 동편길3',phone:'010-5670-2021',elevators:1},
-  {name:'에코빌101동',address:'경기도 파주시 교하로 933',phone:'010-9796-8886',elevators:1},
-  {name:'에코빌 102동',address:'경기도 파주시 교하로 933',phone:'010-7768-1126',elevators:1},
-  {name:'에코빌 103동',address:'경기도 파주시 교하로 933',phone:'010-9922-3274',elevators:1},
-  {name:'현장명',address:'주소',phone:'연락처',elevators:3},
-  {name:'시그네틱스(주)파주공장',address:'경기도 파주시 탄현면 평화로 711',phone:null,elevators:5},
-  {name:'정원갤러리',address:'경기도 파주시 탄현면 헤이리마을길 32',phone:'010-5259-8100',elevators:1},
-  {name:'촬영아카데미',address:'경기도 파주시 탄현면 헤이리마을길 26',phone:'010-5328-9019',elevators:1},
-  {name:'파주개성요양병원',address:'경기도 파주시 하지석길 45',phone:'070-8685-6600',elevators:1},
-  {name:'하이디하우스',address:'경기도 파주시 탄현면 헤이리마을길 76-95',phone:'010-7937-1789',elevators:1},
-  {name:'한향림도자미술관',address:'경기도 파주시 탄현면 헤이리마을길 82-37',phone:'010-3626-6676',elevators:1},
-  {name:'호텔 U&I',address:'경기도 파주시 탄현면 성동리 124-19',phone:'010-8926-8919',elevators:1},
-  {name:'화이트블록',address:'경기도 파주시 탄현면 헤이리마을길 72',phone:'031-992-4400',elevators:1},
-  {name:'(주)류재은베이커리',address:'경기도 파주시 탄현면 요풍길 265',phone:'010-9763-5014',elevators:1},
-  {name:'느림보출판사',address:'경기도 파주시 탄현면 헤이리마을길 48-45',phone:'010-3061-5986',elevators:1},
-  {name:'법흥리497-105외1',address:'경기도 파주시 법흥로88',phone:'010-8304-4936',elevators:1},
-  {name:'창비창고시설',address:'파주시 헤이리로133번길63',phone:'010-4136-5975',elevators:1},
-  {name:'덕이동',address:'주소 미입력',phone:null,elevators:1},
-  {name:'아이산 산부인과',address:'경기도 고양시 일산서구 덕이로 10',phone:'010-5217-8182',elevators:2},
-  {name:'아이산 산후조리원',address:'경기도 고양시 일산서구 덕이로 8',phone:'010-5217-8182',elevators:1},
-  {name:'(주)까사미아파주사옥',address:'경기도 파주시 문발로 127',phone:'010-3016-9102',elevators:1},
-  {name:'세종출판벤쳐타운',address:'경기도 파주시 문발로 115',phone:'010-8025-6173',elevators:1},
-  {name:'스튜디오5274',address:'경기도 파주시 회동길 57-23',phone:'010-3681-6270',elevators:1},
-  {name:'효남빌딩',address:'경기도 파주시 회동길 77-3',phone:'010-2369-8627',elevators:1},
-  {name:'작가세계',address:'경기도 파주시 회동길 37-14',phone:'010-2369-8627(키움빌딩관리)',elevators:1},
-  {name:'고래곰나비',address:'경기도 파주시 문발로 139 (문발동)',phone:'010-2369-8627(키움빌딩관리)',elevators:1},
-  {name:'베네피아',address:'경기도 파주시 문발로 129',phone:'010-5899-1516',elevators:2},
-  {name:'(주)다락원',address:'경기도 파주시 문발로 211',phone:null,elevators:1},
-  {name:'(주)도서출판보리',address:'경기도 파주시 직지길 492',phone:'010-3579-3328',elevators:1},
-  {name:'(주)도서출판한길사',address:'경기도 파주시 광인사길 37',phone:'031-955-2001',elevators:1},
-  {name:'논장사옥',address:'경기도 파주시 회동길 329',phone:'010-8834-3888',elevators:1},
-  {name:'도서출판흙마당',address:'경기도 파주시 회동길 373',phone:'010-2276-5190',elevators:1},
-  {name:'레인보우 사옥',address:'경기도 파주시 회동길 363-21',phone:'010-8870-0321',elevators:1},
-  {name:'성지문화사',address:'경기도 파주시 광인사길 68',phone:'010-2369-8627(키움빌딩관리)',elevators:1},
-  {name:'아시아출판문화정보센타',address:'경기도 파주시 회동길 145',phone:'010-9162-0494',elevators:1},
-  {name:'열화당사옥',address:'경기도 파주시 광인사길 25',phone:'010-4571-0135',elevators:2},
-  {name:'썸북스',address:'경기도 파주시 서패동472-4',phone:'010-5844-3509',elevators:1},
-  {name:'타이포그라피',address:'경기도 파주시 회동길 330',phone:'010-3993-3437',elevators:1},
-  {name:'토마토하우스',address:'경기도 파주시 회동길 325-6',phone:'010-2369-8627(키움빌딩관리)',elevators:1},
-  {name:'파주2단지푸른사상사옥',address:'경기도 파주시 회동길 337-16',phone:'010-2369-8627(키움빌딩관리)',elevators:1},
-  {name:'뜨인돌출판사사옥',address:'경기도 파주시 회동길 337-9',phone:'010-2369-5627(키움빌딩관리)',elevators:1},
-  {name:'날마다 출판사',address:'경기도 파주시 회동길 513',phone:'010-2369-8627(키움빌딩관리)',elevators:1},
-  {name:'리버인더로스팅',address:'경기도 파주시 지목로 9',phone:'010-2330-0197',elevators:1},
-  {name:'아카넷사옥',address:'경기도 파주시 회동길 445-3',phone:'010-3282-8981',elevators:1},
-  {name:'신촌동168-4',address:'경기도 파주시 168-4',phone:'010-6363-3616',elevators:1},
-  {name:'(주)예인미술',address:'경기도 파주시 문발로 459',phone:'010-9900-9356',elevators:1},
-  {name:'RH스튜디오',address:'경기도 파주시 회동길 503-3',phone:'010-2369-8627키움빌딩관리',elevators:1},
-  {name:'싱크피쉬',address:'경기도 파주시 회동길 530-19',phone:'010-3640-5220',elevators:1},
-  {name:'문학수첩',address:'경기도 파주시 문발동 633-4',phone:'031-955-9088',elevators:1},
-  {name:'동양미디어사옥',address:'경기도 파주시 회동길 512',phone:'010-2369-8627(키움빌딩관리)',elevators:2},
-  {name:'디자인비따사옥',address:'경기도 파주시 회동길 446',phone:'010-9357-6791',elevators:1},
-  {name:'문발동75-32(아이빅테크)',address:'경기도 파주시 지목로 112-1',phone:'010-5265-5946',elevators:1},
-  {name:'(주)코바스',address:'경기도 파주시 신촌로 43',phone:'010-6657-7911',elevators:1},
-  {name:'그린빌원룸',address:'경기도 파주시 지목로 25-28',phone:'010-5340-5571',elevators:1},
-  {name:'문발동 73-18 근생',address:'경기도 파주시 교하로 891-2',phone:'010-8428-8288',elevators:1},
-  {name:'신촌동60-8근생',address:'경기도 파주시 지목로 89-24',phone:'010-9012-1165',elevators:1},
-  {name:'은진빌리지(문발동 73-17)',address:'경기도 파주시 교하로 891-10',phone:'010-5276-1472',elevators:1},
-  {name:'서패동188-1(언글래마우스)',address:'경기 파주시 서패동 188-1',phone:'010-4743-3155',elevators:1},
-  {name:'서패동178-7',address:'경기도 파주시 서패동178-7',phone:'010-5355-4588',elevators:1},
-  {name:'서패동240-6',address:'경기도 파주시 서패동240-6',phone:null,elevators:1},
-  {name:'서패동245',address:'경기도 파주시 서패동245',phone:null,elevators:1},
-  {name:'그룹에이치컴퍼니',address:'경기도 파주시 회동길 521-1',phone:'010-4024-3503',elevators:1},
-  {name:'비주프린팅사옥',address:'경기도 파주시 재두루미길 90',phone:'010-5440-1557',elevators:1},
-  {name:'씨앤톡사옥',address:'경기도 파주시 문발로 405',phone:'010-3752-1738',elevators:1},
-  {name:'예림인쇄사옥',address:'경기도 파주시 문발로 435-1',phone:'010-2102-0824',elevators:1},
-  {name:'신촌동40-19',address:'경기도 파주시 지목로139-18',phone:null,elevators:1},
-  {name:'송촌동618-12',address:'파주시 소라지로 299-9',phone:'010-6203-5099',elevators:1},
-  {name:'MAXCIO',address:'파주시 소라지로 263번길 23-15',phone:'010-4860-2986',elevators:1},
-  {name:'MAXCIO G.spce',address:'파주시 소라지로 263번길 23-11',phone:'010-4860-2986',elevators:1},
-  {name:'톡사옥',address:'경기도 파주시 심학산로8',phone:'010-2369-8627',elevators:1},
-  {name:'송촌동 578-49',address:'경기 파주시 소라지로 235',phone:'010-9492-4535',elevators:1},
-  {name:'목동동1019-2(2.5.8.11)',address:'산내로123번길6-20',phone:'010-8920-7128',elevators:1},
-  {name:'목동동1031-4',address:'교하로133번길39',phone:'010-3723-6632',elevators:1},
-  {name:'목동동 1065-2',address:'산내로7번길25-17',phone:'010-5347-0321',elevators:1},
-  {name:'목동동1065-3(2,4,6,8,10,12)',address:'산내로7번길25-19',phone:'010-5904-5129',elevators:1},
-  {name:'목동동1067-4',address:'산내로7번길7',phone:'010-5592-5622',elevators:1},
-  {name:'목동동1067-8',address:'산내로7번길7-4',phone:'010-5818-3139',elevators:1},
-  {name:'목동동1067-9(2,5,8,11)전화후',address:'산내로7번길7-5',phone:'010-5169-6093',elevators:1},
-  {name:'목동동1069(2,5,8,11)',address:'산내로7번길25-7',phone:'010-8706-8500',elevators:1},
-  {name:'목동동1069-2 보통식당',address:'산내로7번길 25-1',phone:'010-9947-0575',elevators:1},
-  {name:'대웅주택',address:'와석순환로252번길7-9',phone:'01042548866',elevators:1},
-  {name:'프랑프랑',address:'와석순환로252번길7-1',phone:'010-4231-6009',elevators:1},
-  {name:'목동동1105-5(2,5,8,11)',address:'와석순환로252번길7-23',phone:'010-6794-8522',elevators:1},
-  {name:'목동동1107-2(1,4,7,10)',address:'와석순환로252번길7-31',phone:'010-3676-9931',elevators:1},
-  {name:'목동동1107-7',address:'와석순환로252번길7-41',phone:'010-6559-1378',elevators:1},
-  {name:'목동동1109-3',address:'심학산로423번길12-12',phone:'010-2124-0616',elevators:1},
-  {name:'목동동1115-1',address:'심학산로423번길12-4',phone:'010-9277-7461',elevators:1},
-  {name:'캔빌(3,6,9,12)',address:'심학산로423번길12-8',phone:'010-3357-2885',elevators:1},
-  {name:'목동동1115-4(1,4,7,10)',address:'심학산로423번길12-10',phone:'010-7235-6933',elevators:1},
-  {name:'목동동1112-5',address:'심학산로423번길 12-1',phone:'010-6234-1705',elevators:1},
-  {name:'목동동1122-1',address:'와석순환로252번길14',phone:'010-4313-6009',elevators:1},
-  {name:'목동동1127-6',address:'심학산로423번길 13-8',phone:'010-5818-3139',elevators:1},
-  {name:'목동동1127-7(3,6,9,12)',address:'심학산로423번길13-10',phone:'010-8863-0536',elevators:1},
-  {name:'윤&리하우스(1,4,7,10)',address:'심학산로423번길21-20',phone:'010-9036-1132',elevators:1},
-  {name:'진양빌딩',address:'심학산로423번길7-14',phone:'010-7710-3554',elevators:1},
-  {name:'목동동1131-2',address:'심학산로423번길7-8',phone:'010-7518-0503',elevators:1},
-  {name:'힐링플러스2',address:'심학산로415',phone:'010-4400-6420',elevators:1},
-  {name:'파주프리미엄아울렛',address:'경기도 파주시 탄현면 필승로 200',phone:null,elevators:21},
-  {name:'서패동235-12외2',address:'경기도 파주시 돌곶이길133',phone:null,elevators:0},
-  {name:'다율근린생활시설1동',address:'경기도 파주시 다율동528',phone:null,elevators:0},
-  {name:'다율동근린생활시설 2동',address:'경기도 파주시 다율동528',phone:null,elevators:0},
-  {name:'두영빌딩',address:'경기도 파주시 신촌동740-5',phone:null,elevators:0},
-];
 
-const PAJU2_SEED = [
-  {name:'운정물재생센터(매달거래명세표같이보내기)',address:'경기도 파주시 운정',elevators:1,contract_start:'2021-01-01',contract_end:'2024-12-31',notes:'FM',phone:'031-949-5645',owner:'㈜에코비트워터'},
-  {name:'최성만빌딩(분담)CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-08-01',contract_end:'2027-07-31',notes:'FM',phone:'010-9079-6252',owner:'최성만'},
-  {name:'운정월드타워(분담) CMS',address:'경기도 파주시 운정',elevators:2,contract_start:'2022-07-01',contract_end:'2027-06-30',notes:'FM',phone:'031-955-1331',owner:'유원종합관리'},
-  {name:'운정와이즈병원(분담)CMS',address:'경기도 파주시 운정',elevators:4,contract_start:'2024-01-01',contract_end:'2028-12-31',notes:'FM',phone:'031-937-8888',owner:'엔씨에스'},
-  {name:'운정법조타운(분담) CMS',address:'경기도 파주시 운정',elevators:4,contract_start:'2023-01-01',contract_end:'2027-12-31',notes:'FM',phone:'031-839-3920',owner:'플러스탑'},
-  {name:'와동동1640-2(분담)',address:'경기도 파주시 와동동',elevators:1,contract_start:'2024-08-01',contract_end:'2029-07-31',notes:'FM',phone:'952-5454',owner:'엄일성'},
-  {name:'와동동1638-4(분담)CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2023-04-01',contract_end:'2028-03-31',notes:'FM',phone:'010-7120-4704',owner:'김은희'},
-  {name:'와동동1630-2(분담)CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2024-02-01',contract_end:'2029-01-31',notes:'FM',phone:'010-8629-8222',owner:'㈜디에스건설'},
-  {name:'와동동1622-4(분담) 나래빌 CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2021-09-01',contract_end:'2026-08-30',notes:'FM',phone:'010-5328-9947',owner:'유영숙'},
-  {name:'와동동1606-1(분담) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2020-10-01',contract_end:'2025-09-30',notes:'FM',phone:'010-7737-8777',owner:'전상순(광장)'},
-  {name:'와동동1569-1(분담) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2023-11-01',contract_end:'2028-10-31',notes:'FM',phone:'010-8706-8500',owner:'에스와이'},
-  {name:'순복음큰기적교회(분담)',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-02-01',contract_end:'2027-01-31',notes:'FM',phone:'031-942-0109',owner:'이용우'},
-  {name:'트윈프라자1(분담)',address:'경기도 파주시 운정',elevators:1,contract_start:'2021-02-01',contract_end:'2026-01-31',notes:'FM',phone:'031-953-8800',owner:'신우이엔씨'},
-  {name:'트윈프라자2(분담)',address:'경기도 파주시 운정',elevators:1,contract_start:'2021-02-01',contract_end:'2026-01-31',notes:'FM',phone:'031-953-8800',owner:'신우이엔씨'},
-  {name:'메디스타워(와동동1303-4) (분담)CMS',address:'경기도 파주시 와동동',elevators:2,contract_start:'2022-07-01',contract_end:'2027-06-30',notes:'FM',phone:'947-6961',owner:'메디스타워관리단'},
-  {name:'와동동1572-8(분담)3h 빌',address:'경기도 파주시 와동동',elevators:1,contract_start:'2022-12-01',contract_end:'2027-11-30',notes:'FM',phone:'010-3243-2724',owner:'송병일'},
-  {name:'J 프라자(와동동)(매월 우편발송)분담',address:'경기도 파주시 와동동',elevators:1,contract_start:'2022-08-22',contract_end:'2027-08-31',notes:'FM',phone:'010-3271-5445',owner:'전성호'},
-  {name:'블루앤레드  분담(CMS)와동동1652-2',address:'경기도 파주시 와동동',elevators:1,contract_start:'2020-10-01',contract_end:'2025-09-30',notes:'FM',phone:'010-8700-2786',owner:'이용수'},
-  {name:'지산프라자(C2M계산서발행 주소)',address:'경기도 파주시 운정',elevators:1,contract_start:'2023-02-01',contract_end:'2025-01-31',notes:'FM',phone:'010-3129-1933',owner:'신양옥'},
-  {name:'운정행복센터',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-01-01',contract_end:'2024-12-31',notes:'FM',phone:'950-1865',owner:'파주도시관광공사'},
-  {name:'센타프라자 지로입금',address:'경기도 파주시 운정',elevators:1,contract_start:'2021-11-01',contract_end:'2026-10-31',notes:'FM',phone:'943-5859',owner:'㈜월드베스트'},
-  {name:'형원',address:'경기도 파주시 운정',elevators:1,contract_start:'2025-01-01',contract_end:'2029-12-31',notes:'FM',phone:'010-3233-0681',owner:'에덴복지재단'},
-  {name:'명품프라자 (계산서X)',address:'경기도 파주시 운정',elevators:1,contract_start:'2020-04-01',contract_end:'2025-03-31',notes:'FM',phone:'010-9470-4725',owner:'윤기환'},
-  {name:'와동동1615-1(분담) 더블루',address:'경기도 파주시 와동동',elevators:1,contract_start:'2023-05-01',contract_end:'2027-04-30',notes:'POG',phone:'010-5488-6337',owner:'문춘희'},
-  {name:'운정지구C3-1-5 CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2025-09-01',contract_end:'2027-08-31',notes:'POG',phone:'010-5818-3139',owner:'관리자 이주현'},
-  {name:'와동동1603-4(분담)CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2024-09-01',contract_end:'2026-08-31',notes:'POG',phone:'010-4947-6863',owner:'신대호'},
-  {name:'와동동1608(분담)광장부동산 CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2020-11-01',contract_end:'2026-11-30',notes:'POG',phone:'010-5402-5898',owner:'이태주'},
-  {name:'와동동1572-3(분담) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2021-12-01',contract_end:'2025-11-30',notes:'POG',phone:'010-8880-7668',owner:'이형국'},
-  {name:'와동동1642-3(분담) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2025-05-01',contract_end:'2027-04-30',notes:'POG',phone:'010-9311-1672',owner:'육현임'},
-  {name:'와동동1658-1(분담)CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2023-04-01',contract_end:'2027-03-31',notes:'POG',phone:'010-5314-9616',owner:'김한규'},
-  {name:'제파크37차(분담)당하동250-1 CMS',address:'경기도 파주시 당하동',elevators:1,contract_start:'2021-06-01',contract_end:'2026-05-31',notes:'POG',phone:'010-7365-3131',owner:'이아람'},
-  {name:'제파크38차(분담)당하동250-7 CMS',address:'경기도 파주시 당하동',elevators:1,contract_start:'2023-06-01',contract_end:'2026-05-31',notes:'POG',phone:'010-6403-2237',owner:'조한성'},
-  {name:'제파크39차(분담)당하동250-10 CMS',address:'경기도 파주시 당하동',elevators:1,contract_start:'2021-09-01',contract_end:'2024-08-31',notes:'POG',phone:'010-7365-3131',owner:'이아람(운정사랑부동산)'},
-  {name:'와동동1548-2(분담) CMS진스빌',address:'경기도 파주시 와동동',elevators:1,contract_start:'2021-06-01',contract_end:'2029-05-31',notes:'POG',phone:'010-5453-7099',owner:'최효진'},
-  {name:'아스트로(분담) CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-11-01',contract_end:'2026-10-31',notes:'POG',phone:'010-2389-9447',owner:'박양순'},
-  {name:'운정지구C1-34-4(분담) CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2025-01-01',contract_end:'2026-12-31',notes:'POG',phone:'010-5540-0345',owner:'김용교'},
-  {name:'당하동198-17포레스트하우스(분담)',address:'경기도 파주시 당하동',elevators:1,contract_start:'2023-06-01',contract_end:'2025-05-31',notes:'POG',phone:'010-5321-9553',owner:'이레건축'},
-  {name:'홍익유치원(분담) CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-06-01',contract_end:'2024-12-31',notes:'POG',phone:'010-8932-0740',owner:'이혜경'},
-  {name:'제일풍경채3차 그랑퍼스트(분담)',address:'경기도 파주시 운정',elevators:14,contract_start:'2024-12-01',contract_end:'2026-11-30',notes:'POG',phone:'946-7747',owner:'제일풍경재3차 그랑퍼스트'},
-  {name:'제일풍경채 그랑퍼스트상가 퍼스트도장(분담)CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2024-11-01',contract_end:'2025-10-31',notes:'POG',phone:'010-5511-8182',owner:'김재훈'},
-  {name:'제일풍경채 그랑퍼스트분담)',address:'경기도 파주시 운정',elevators:51,contract_start:'2024-08-16',contract_end:'2027-08-15',notes:'POG',phone:'949-8468',owner:'운정제일풍경채그랑퍼스트'},
-  {name:'대광빌딩',address:'경기도 파주시 운정',elevators:1,contract_start:'2023-06-01',contract_end:'2025-05-31',notes:'POG',phone:'010-7727-9159',owner:'정혜숙'},
-  {name:'지애지비리지(당하동198-7)',address:'경기도 파주시 당하동',elevators:1,contract_start:'2022-10-01',contract_end:'2023-09-31',notes:'POG',phone:'010-8020-2455',owner:'솔로몬신축'},
-  {name:'와동동1642-1',address:'경기도 파주시 와동동',elevators:1,contract_start:'2023-08-01',contract_end:'2024-07-31',notes:'POG',phone:'952-5454',owner:'한주PMC'},
-  {name:'와동동1636-4',address:'경기도 파주시 와동동',elevators:1,contract_start:'2022-01-01',contract_end:'2024-12-31',notes:'POG',phone:'010-7118-2834',owner:'김만호'},
-  {name:'와동동1632-1(김선분부동산) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2020-03-01',contract_end:'2026-02-28',notes:'POG',phone:'010-7765-2988',owner:'김선분'},
-  {name:'부엔디아(와동동1572-4) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2020-05-01',contract_end:'2027-05-31',notes:'POG',phone:'010-5453-7097',owner:'이명재'},
-  {name:'소망빌딩(김송자)',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-02-01',contract_end:'2025-01-31',notes:'POG',phone:'010-6663-0031',owner:'김송자'},
-  {name:'에덴하우스',address:'경기도 파주시 운정',elevators:3,contract_start:null,contract_end:'2016-06-30',notes:'POG',phone:'',owner:'에덴복지재단'},
-  {name:'와동동1634-1CMS 문파크',address:'경기도 파주시 와동동',elevators:1,contract_start:'2023-05-01',contract_end:'2025-04-30',notes:'POG',phone:'010-8829-7530',owner:'안이자'},
-  {name:'와동동1662-4(다온하우스) CMS',address:'경기도 파주시 와동동',elevators:1,contract_start:'2024-03-01',contract_end:'2026-02-28',notes:'POG',phone:'010-9278-7114',owner:'손우기'},
-  {name:'더레드 CMS',address:'경기도 파주시 운정',elevators:1,contract_start:'2022-02-01',contract_end:'2026-01-31',notes:'POG',phone:'010-9216-6347',owner:'이현민'},
-];
+// seed_data.json 로드 (없으면 빈 배열)
+const SEED_FILE = path.join(__dirname, 'seed_data.json');
+let SEED_DATA = { sites: [], elevators: [] };
+try {
+  if (fs.existsSync(SEED_FILE)) {
+    SEED_DATA = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8'));
+    console.log(`📦 seed_data.json 로드: 현장 ${SEED_DATA.sites.length}개, 승강기 ${SEED_DATA.elevators.length}개`);
+  } else {
+    console.log('⚠️  seed_data.json 없음 - 자동복구 건너뜀');
+  }
+} catch(e) {
+  console.error('seed_data.json 로드 실패:', e.message);
+}
 
-// ── 자동복구 함수 ─────────────────────────────────────────────
+// ── 사이트코드 생성 ───────────────────────────────────────────
 function makeSiteCode(prefix) {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
 }
 
-function autoRestoreTeam(teamName, seedData) {
-  // ⚠️ 사용자가 추가/수정한 데이터를 절대 삭제하거나 덮어쓰지 않음
-  // SEED에 있는 현장명이 이미 DB에 없을 때만 INSERT (INSERT OR IGNORE)
-  // 기존 데이터는 일절 변경 없음
+// ── seed_data.json → DB 자동복원 ─────────────────────────────
+// 규칙: site_name이 동일한 현장이 이미 있으면 절대 건드리지 않음
+//       없는 현장만 추가 (사용자 추가/수정 데이터 100% 보호)
+function autoRestoreFromSeed() {
   try {
-    const insertStmt = db.prepare(`
-      INSERT OR IGNORE INTO sites
-        (site_code, site_name, address, owner_name, owner_phone,
-         total_elevators, status, contract_start, contract_end, notes, team)
-      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+    const insertSite = db.prepare(`
+      INSERT INTO sites
+        (site_code, site_name, address, owner_name, owner_phone, manager_name,
+         team, total_elevators, status, contract_start, contract_end, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
     `);
-
-    // site_name에 UNIQUE 제약이 없으므로 이름으로 직접 체크
-    const existsStmt = db.prepare(`SELECT id FROM sites WHERE site_name=? AND team=? LIMIT 1`);
-
-    const insertMany = db.transaction((seeds) => {
-      let n = 0;
-      const prefix = teamName === '파주1팀' ? 'P1' : 'P2';
-      for (const s of seeds) {
-        // 이미 같은 이름+팀의 현장이 있으면 건너뜀 (사용자 데이터 보호)
-        const existing = existsStmt.get(s.name, teamName);
-        if (existing) continue;
-        const code = makeSiteCode(prefix);
-        insertStmt.run(
-          code,
-          s.name,
-          s.address || '',
-          s.owner || null,
-          s.phone || null,
-          s.elevators || 0,
-          s.contract_start || null,
-          s.contract_end || null,
-          s.notes || null,
-          teamName
-        );
-        n++;
-      }
-      return n;
-    });
-
-    const inserted = insertMany(seedData);
-    const total = db.prepare(`SELECT COUNT(*) as cnt FROM sites WHERE team=?`).get(teamName).cnt;
-    if (inserted > 0) {
-      console.log(`✅ ${teamName} 복구: ${inserted}개 추가 (총 ${total}개)`);
-    } else {
-      console.log(`✅ ${teamName} 확인: ${total}개 (모두 존재)`);
-    }
-  } catch (err) {
-    console.error(`❌ ${teamName} 자동 복구 실패:`, err.message);
-  }
-}
-
-// ── 승강기 자동복구 (현장 복구 후 실행) ──────────────────────
-// 사용자가 등록한 승강기는 절대 건드리지 않음
-// 해당 현장에 승강기가 0개인 경우에만 SEED 기준으로 기본 승강기 생성
-function autoRestoreElevators() {
-  try {
     const insertElev = db.prepare(`
-      INSERT OR IGNORE INTO elevators
-        (site_id, elevator_no, elevator_name, elevator_type, status)
-      VALUES (?, ?, ?, '승객용', 'normal')
+      INSERT INTO elevators
+        (site_id, elevator_no, elevator_name, elevator_type,
+         manufacturer, manufacture_year, install_date, floors_served,
+         capacity, load_capacity, speed, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertInsp = db.prepare(`
+      INSERT INTO inspections
+        (elevator_id, site_id, inspection_type, inspection_date, next_inspection_date,
+         inspector_name, inspection_agency, result, report_no, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertIssue = db.prepare(`
+      INSERT INTO inspection_issues
+        (inspection_id, issue_no, location, issue_content, action_required,
+         action_deadline, status, resolved_date, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertMonthly = db.prepare(`
+      INSERT INTO monthly_checks
+        (site_id, elevator_id, check_year, check_month, check_date, checker_name, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const allSeeds = [
-      ...PAJU1_SEED.map(s => ({ ...s, team: '파주1팀' })),
-      ...PAJU2_SEED.map(s => ({ ...s, team: '파주2팀' })),
-    ];
+    const restoreTx = db.transaction(() => {
+      let siteAdded = 0, elevAdded = 0, inspAdded = 0, issueAdded = 0, monthlyAdded = 0;
 
-    const restoreMany = db.transaction((seeds) => {
-      let total = 0;
-      for (const s of seeds) {
-        const seedCount = s.elevators || 0;
-        if (seedCount === 0) continue;
+      // ① 현장 복원
+      for (const s of SEED_DATA.sites || []) {
+        if (!s.site_name) continue;
+        const exists = db.prepare('SELECT id FROM sites WHERE site_name=?').get(s.site_name);
+        if (exists) continue;
 
-        // 현장 ID 찾기
-        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(s.name);
-        if (!site) continue;
+        const prefix = s.team === '파주2팀' ? 'P2' : 'P1';
+        const code = makeSiteCode(prefix);
+        const r = insertSite.run(
+          code, s.site_name, s.address||'',
+          s.owner_name||null, s.owner_phone||null, s.manager_name||null,
+          s.team||'', s.total_elevators||0,
+          s.contract_start||null, s.contract_end||null, s.notes||null
+        );
+        siteAdded++;
 
-        // ⚠️ 해당 현장에 이미 승강기가 있으면 건드리지 않음 (사용자 데이터 보호)
-        const existingElev = db.prepare('SELECT COUNT(*) as cnt FROM elevators WHERE site_id=?').get(site.id);
-        if (existingElev.cnt > 0) continue;
-
-        // 승강기가 없는 현장에만 SEED 기준으로 기본 생성
-        for (let i = 1; i <= seedCount; i++) {
+        const newSiteId = r.lastInsertRowid;
+        const siteElevs = (SEED_DATA.elevators||[]).filter(e => e.site_name === s.site_name);
+        for (const e of siteElevs) {
+          const elevExists = db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(newSiteId, e.elevator_no);
+          if (elevExists) continue;
           insertElev.run(
-            site.id,
-            `${site.id.toString().padStart(3,'0')}-E${i.toString().padStart(2,'0')}`,
-            `${s.name} ${i}호기`
+            newSiteId, e.elevator_no, e.elevator_name||'',
+            e.elevator_type||'승객용', e.manufacturer||null,
+            e.manufacture_year||null, e.install_date||null, e.floors_served||null,
+            e.capacity||null, e.load_capacity||null, e.speed||null,
+            e.status||'normal', e.notes||null
           );
-          total++;
+          elevAdded++;
         }
       }
-      return total;
+
+      // ② 기존 현장의 누락된 승강기 복원
+      for (const e of (SEED_DATA.elevators||[])) {
+        if (!e.site_name || !e.elevator_no) continue;
+        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(e.site_name);
+        if (!site) continue;
+        const exists = db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, e.elevator_no);
+        if (exists) continue;
+        insertElev.run(
+          site.id, e.elevator_no, e.elevator_name||'',
+          e.elevator_type||'승객용', e.manufacturer||null,
+          e.manufacture_year||null, e.install_date||null, e.floors_served||null,
+          e.capacity||null, e.load_capacity||null, e.speed||null,
+          e.status||'normal', e.notes||null
+        );
+        elevAdded++;
+      }
+
+      // ③ 검사 데이터 복원
+      for (const i of (SEED_DATA.inspections||[])) {
+        if (!i.site_name || !i.inspection_date) continue;
+        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(i.site_name);
+        if (!site) continue;
+        const elev = i.elevator_no ? db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, i.elevator_no) : null;
+        if (!elev) continue;
+        const exists = db.prepare('SELECT id FROM inspections WHERE elevator_id=? AND inspection_date=? AND inspection_type=?').get(elev.id, i.inspection_date, i.inspection_type);
+        if (exists) continue;
+        insertInsp.run(
+          elev.id, site.id, i.inspection_type||'', i.inspection_date,
+          i.next_inspection_date||null, i.inspector_name||null,
+          i.inspection_agency||null, i.result||'합격', i.report_no||null, i.notes||null
+        );
+        inspAdded++;
+      }
+
+      // ④ 지적사항 복원
+      for (const iss of (SEED_DATA.issues||[])) {
+        if (!iss.site_name || !iss.inspection_date) continue;
+        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(iss.site_name);
+        if (!site) continue;
+        const elev = iss.elevator_no ? db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, iss.elevator_no) : null;
+        if (!elev) continue;
+        const insp = db.prepare('SELECT id FROM inspections WHERE elevator_id=? AND inspection_date=?').get(elev.id, iss.inspection_date);
+        if (!insp) continue;
+        const exists = db.prepare('SELECT id FROM inspection_issues WHERE inspection_id=? AND issue_content=?').get(insp.id, iss.issue_content);
+        if (exists) continue;
+        insertIssue.run(
+          insp.id, iss.issue_no||null, iss.location||null, iss.issue_content||null,
+          iss.action_required||null, iss.action_deadline||null,
+          iss.status||'미조치', iss.resolved_date||null, iss.notes||null
+        );
+        issueAdded++;
+      }
+
+      // ⑤ 월간점검 복원
+      for (const m of (SEED_DATA.monthly||[])) {
+        if (!m.site_name || !m.check_year || !m.check_month) continue;
+        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(m.site_name);
+        if (!site) continue;
+        const elev = m.elevator_no ? db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, m.elevator_no) : null;
+        if (!elev) continue;
+        const exists = db.prepare('SELECT id FROM monthly_checks WHERE elevator_id=? AND check_year=? AND check_month=?').get(elev.id, m.check_year, m.check_month);
+        if (exists) continue;
+        insertMonthly.run(
+          site.id, elev.id, m.check_year, m.check_month,
+          m.check_date||null, m.checker_name||null, m.status||'예정', m.notes||null
+        );
+        monthlyAdded++;
+      }
+
+      return { siteAdded, elevAdded, inspAdded, issueAdded, monthlyAdded };
     });
 
-    const inserted = restoreMany(allSeeds);
-    const elevTotal = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get().cnt;
-    if (inserted > 0) {
-      console.log(`✅ 승강기 복구: ${inserted}대 추가 (총 ${elevTotal}대)`);
-    } else {
-      console.log(`✅ 승강기 확인: ${elevTotal}대 (모두 존재)`);
+    const result = restoreTx();
+    const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
+    const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
+    if (result.siteAdded > 0 || result.elevAdded > 0 || result.inspAdded > 0) {
+      console.log(`✅ 자동복구: 현장+${result.siteAdded} 승강기+${result.elevAdded} 검사+${result.inspAdded} 지적+${result.issueAdded} 월간+${result.monthlyAdded}`);
     }
-  } catch (err) {
-    console.error('❌ 승강기 자동 복구 실패:', err.message);
+    console.log(`✅ 복구완료 → 현장: ${total}개, 승강기: ${elevTotal}대`);
+  } catch(err) {
+    console.error('❌ 자동복구 실패:', err.message);
   }
 }
 
-// 서버 시작 직후 실행 (자동복구)
-autoRestoreTeam('파주1팀', PAJU1_SEED);
-autoRestoreTeam('파주2팀', PAJU2_SEED);
-autoRestoreElevators();
-console.log(`✅ 자동복구 완료 → 현장: ${db.prepare('SELECT COUNT(*) as c FROM sites').get().c}개, 승강기: ${db.prepare('SELECT COUNT(*) as c FROM elevators').get().c}대`);
+// ── seed_data.json 실시간 갱신 (현장/승강기/검사/지적사항 변경 시 호출) ──────
+// DB 전체 데이터를 seed_data.json에 즉시 저장 → 다음 재배포 때 복원
+function updateSeedFile() {
+  try {
+    const sites = db.prepare('SELECT * FROM sites').all();
+    const elevators = db.prepare('SELECT * FROM elevators').all();
+    const inspections = db.prepare('SELECT * FROM inspections').all();
+    const issues = db.prepare('SELECT * FROM inspection_issues').all();
+    const monthly = db.prepare('SELECT * FROM monthly_checks').all();
+
+    const siteIdToName = {};
+    for (const s of sites) siteIdToName[s.id] = s.site_name;
+    const elevIdToNo = {};
+    for (const e of elevators) elevIdToNo[e.id] = e.elevator_no;
+
+    const sitesClean = sites.map(s => ({
+      site_name: s.site_name,
+      address: s.address||'',
+      owner_name: s.owner_name||null,
+      owner_phone: s.owner_phone||null,
+      manager_name: s.manager_name||null,
+      team: s.team||'',
+      total_elevators: s.total_elevators||0,
+      status: s.status||'active',
+      contract_start: s.contract_start||null,
+      contract_end: s.contract_end||null,
+      notes: s.notes||null,
+    }));
+
+    const elevsClean = elevators.map(e => ({
+      site_name: siteIdToName[e.site_id]||'',
+      elevator_no: e.elevator_no||'',
+      elevator_name: e.elevator_name||'',
+      elevator_type: e.elevator_type||'승객용',
+      manufacturer: e.manufacturer||null,
+      manufacture_year: e.manufacture_year||null,
+      install_date: e.install_date||null,
+      floors_served: e.floors_served||null,
+      capacity: e.capacity||null,
+      load_capacity: e.load_capacity||null,
+      speed: e.speed||null,
+      status: e.status||'normal',
+      notes: e.notes||null,
+    })).filter(e => e.site_name);
+
+    // 검사 데이터 (site_name, elevator_no로 매핑)
+    const inspsClean = inspections.map(i => ({
+      site_name: siteIdToName[i.site_id]||'',
+      elevator_no: elevIdToNo[i.elevator_id]||'',
+      inspection_type: i.inspection_type||'',
+      inspection_date: i.inspection_date||null,
+      next_inspection_date: i.next_inspection_date||null,
+      inspector_name: i.inspector_name||null,
+      inspection_agency: i.inspection_agency||null,
+      result: i.result||'합격',
+      report_no: i.report_no||null,
+      notes: i.notes||null,
+    })).filter(i => i.site_name);
+
+    // 지적사항 데이터
+    const issuesClean = issues.map(iss => {
+      const insp = inspections.find(i => i.id === iss.inspection_id);
+      return {
+        site_name: insp ? (siteIdToName[insp.site_id]||'') : '',
+        elevator_no: insp ? (elevIdToNo[insp.elevator_id]||'') : '',
+        inspection_date: insp ? insp.inspection_date : null,
+        issue_no: iss.issue_no||null,
+        location: iss.location||null,
+        issue_content: iss.issue_content||null,
+        action_required: iss.action_required||null,
+        action_deadline: iss.action_deadline||null,
+        status: iss.status||'미조치',
+        resolved_date: iss.resolved_date||null,
+        notes: iss.notes||null,
+      };
+    }).filter(i => i.site_name);
+
+    // 월간점검 데이터
+    const monthlyClean = monthly.map(m => ({
+      site_name: siteIdToName[m.site_id]||'',
+      elevator_no: elevIdToNo[m.elevator_id]||'',
+      check_year: m.check_year||null,
+      check_month: m.check_month||null,
+      check_date: m.check_date||null,
+      checker_name: m.checker_name||null,
+      status: m.status||'예정',
+      notes: m.notes||null,
+    })).filter(m => m.site_name);
+
+    const seed = {
+      version: '2.7.0',
+      updated_at: new Date().toISOString(),
+      sites: sitesClean,
+      elevators: elevsClean,
+      inspections: inspsClean,
+      issues: issuesClean,
+      monthly: monthlyClean,
+    };
+    fs.writeFileSync(SEED_FILE, JSON.stringify(seed, null, 2), 'utf8');
+    SEED_DATA = seed; // 메모리도 갱신
+    console.log(`💾 seed 저장: 현장${sitesClean.length} 승강기${elevsClean.length} 검사${inspsClean.length} 지적${issuesClean.length}`);
+  } catch(e) {
+    console.error('seed_data.json 갱신 실패:', e.message);
+  }
+}
+
+// 서버 시작 시 자동복구 실행
+autoRestoreFromSeed();
+
 
 // ── 기본 관리자 계정 초기화 ──────────────────────────────────
 function hashPin(pin) {
@@ -821,6 +818,7 @@ app.post('/api/sites', wrap((req, res) => {
       .run(site_code, site_name, address, owner_name||null, owner_phone||null, manager_name||null, total_elevators||0, status||'active', contract_start||null, contract_end||null, notes||null);
   }
   res.json({ success: true, id: r.lastInsertRowid });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 app.put('/api/sites/:id', wrap((req, res) => {
@@ -834,11 +832,13 @@ app.put('/api/sites/:id', wrap((req, res) => {
       .run(site_code, site_name, address, owner_name||null, owner_phone||null, manager_name||null, total_elevators||0, status||'active', contract_start||null, contract_end||null, notes||null, req.params.id);
   }
   res.json({ success: true });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 app.delete('/api/sites/:id', wrap((req, res) => {
   db.prepare('DELETE FROM sites WHERE id=?').run(req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 // ── 승강기(Elevators) ─────────────────────────────────────────
@@ -866,6 +866,7 @@ app.post('/api/elevators', wrap((req, res) => {
   const r = db.prepare(`INSERT INTO elevators (site_id, elevator_no, elevator_name, elevator_type, manufacturer, manufacture_year, install_date, floors_served, capacity, load_capacity, speed, status, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(site_id, elevator_no, elevator_name || null, elevator_type || '승객용', manufacturer || null, manufacture_year || null, install_date || null, floors_served || null, capacity || null, load_capacity || null, speed || null, status || 'normal', notes || null);
   res.json({ success: true, id: r.lastInsertRowid });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 app.put('/api/elevators/:id', wrap((req, res) => {
@@ -873,11 +874,13 @@ app.put('/api/elevators/:id', wrap((req, res) => {
   db.prepare(`UPDATE elevators SET site_id=?, elevator_no=?, elevator_name=?, elevator_type=?, manufacturer=?, manufacture_year=?, install_date=?, floors_served=?, capacity=?, load_capacity=?, speed=?, status=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(site_id, elevator_no, elevator_name || null, elevator_type || '승객용', manufacturer || null, manufacture_year || null, install_date || null, floors_served || null, capacity || null, load_capacity || null, speed || null, status || 'normal', notes || null, req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 app.delete('/api/elevators/:id', wrap((req, res) => {
   db.prepare('DELETE FROM elevators WHERE id=?').run(req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 // ── 검사(Inspections) ─────────────────────────────────────────
@@ -906,6 +909,7 @@ app.post('/api/inspections', wrap((req, res) => {
   const r = db.prepare(`INSERT INTO inspections (elevator_id, site_id, inspection_type, inspection_date, next_inspection_date, inspector_name, inspection_agency, result, report_no, notes) VALUES (?,?,?,?,?,?,?,?,?,?)`)
     .run(elevator_id, site_id, inspection_type, inspection_date, next_inspection_date || null, inspector_name || null, inspection_agency || null, result || '합격', report_no || null, notes || null);
   res.json({ success: true, id: r.lastInsertRowid });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 app.put('/api/inspections/:id', wrap((req, res) => {
@@ -913,11 +917,13 @@ app.put('/api/inspections/:id', wrap((req, res) => {
   db.prepare(`UPDATE inspections SET elevator_id=?, site_id=?, inspection_type=?, inspection_date=?, next_inspection_date=?, inspector_name=?, inspection_agency=?, result=?, report_no=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(elevator_id, site_id, inspection_type, inspection_date, next_inspection_date || null, inspector_name || null, inspection_agency || null, result || '합격', report_no || null, notes || null, req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 app.delete('/api/inspections/:id', wrap((req, res) => {
   db.prepare('DELETE FROM inspections WHERE id=?').run(req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile()); // 비동기로 seed 갱신
 }));
 
 // ── 지적사항(Issues) ──────────────────────────────────────────
@@ -972,6 +978,7 @@ app.post('/api/issues/bulk', wrap((req, res) => {
   });
   const ids = insertMany(issues);
   res.json({ success: true, ids, count: ids.length });
+  setImmediate(() => updateSeedFile());
 }));
 
 app.patch('/api/issues/:id/action', wrap((req, res) => {
@@ -979,6 +986,7 @@ app.patch('/api/issues/:id/action', wrap((req, res) => {
   db.prepare(`UPDATE inspection_issues SET status=?, action_taken=?, action_date=?, action_by=?, photo_before=?, photo_after=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(status || '조치완료', action_taken || null, action_date || null, action_by || null, photo_before || null, photo_after || null, req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile());
 }));
 
 app.put('/api/issues/:id', wrap((req, res) => {
@@ -986,11 +994,13 @@ app.put('/api/issues/:id', wrap((req, res) => {
   db.prepare(`UPDATE inspection_issues SET issue_category=?, issue_description=?, legal_basis=?, severity=?, status=?, action_required=?, action_taken=?, action_date=?, action_by=?, deadline=?, inspection_date=?, inspector_name=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(issue_category || null, issue_description, legal_basis || null, severity || '경결함', status || '미조치', action_required || null, action_taken || null, action_date || null, action_by || null, deadline || null, inspection_date || null, inspector_name || null, req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile());
 }));
 
 app.delete('/api/issues/:id', wrap((req, res) => {
   db.prepare('DELETE FROM inspection_issues WHERE id=?').run(req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile());
 }));
 
 app.get('/api/issues/stats/pending', wrap((req, res) => {
@@ -1033,6 +1043,7 @@ app.post('/api/monthly', wrap((req, res) => {
   const r = db.prepare(`INSERT INTO monthly_checks (elevator_id, site_id, check_year, check_month, check_date, checker_name, status, door_check, motor_check, brake_check, rope_check, safety_device_check, lighting_check, emergency_check, overall_result, issues_found, actions_taken, next_action, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(elevator_id, site_id, check_year, check_month, check_date || null, checker_name || null, status || '예정', door_check || '양호', motor_check || '양호', brake_check || '양호', rope_check || '양호', safety_device_check || '양호', lighting_check || '양호', emergency_check || '양호', overall_result || '양호', issues_found || null, actions_taken || null, next_action || null, notes || null);
   res.json({ success: true, id: r.lastInsertRowid });
+  setImmediate(() => updateSeedFile());
 }));
 
 app.put('/api/monthly/:id', wrap((req, res) => {
@@ -1040,11 +1051,13 @@ app.put('/api/monthly/:id', wrap((req, res) => {
   db.prepare(`UPDATE monthly_checks SET check_date=?, checker_name=?, status=?, door_check=?, motor_check=?, brake_check=?, rope_check=?, safety_device_check=?, lighting_check=?, emergency_check=?, overall_result=?, issues_found=?, actions_taken=?, next_action=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(check_date || null, checker_name || null, status || '예정', door_check || '양호', motor_check || '양호', brake_check || '양호', rope_check || '양호', safety_device_check || '양호', lighting_check || '양호', emergency_check || '양호', overall_result || '양호', issues_found || null, actions_taken || null, next_action || null, notes || null, req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile());
 }));
 
 app.delete('/api/monthly/:id', wrap((req, res) => {
   db.prepare('DELETE FROM monthly_checks WHERE id=?').run(req.params.id);
   res.json({ success: true });
+  setImmediate(() => updateSeedFile());
 }));
 
 // ── 분기 점검(Quarterly) ──────────────────────────────────────
@@ -1205,14 +1218,14 @@ app.get('/api/version', (req, res) => {
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
   const sites = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
   const elevators = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
-  res.json({ version: '2.6.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
+  res.json({ version: '2.7.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
 });
 
 // ── DB 전체 백업 (JSON) ─────────────────────────────────────────
 // GET /api/backup → 전체 DB를 JSON으로 반환 (앱에서 로컬 저장 가능)
 app.get('/api/backup', wrap((req, res) => {
   const data = {
-    version: '2.6.0',
+    version: '2.7.0',
     timestamp: new Date().toISOString(),
     sites: db.prepare('SELECT * FROM sites').all(),
     elevators: db.prepare('SELECT * FROM elevators').all(),
