@@ -1218,14 +1218,14 @@ app.get('/api/version', (req, res) => {
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
   const sites = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
   const elevators = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
-  res.json({ version: '2.6.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
+  res.json({ version: '2.7.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
 });
 
 // ── DB 전체 백업 (JSON) ─────────────────────────────────────────
 // GET /api/backup → 전체 DB를 JSON으로 반환 (앱에서 로컬 저장 가능)
 app.get('/api/backup', wrap((req, res) => {
   const data = {
-    version: '2.6.0',
+    version: '2.7.0',
     timestamp: new Date().toISOString(),
     sites: db.prepare('SELECT * FROM sites').all(),
     elevators: db.prepare('SELECT * FROM elevators').all(),
@@ -1342,6 +1342,76 @@ app.post('/api/restore', wrap((req, res) => {
   restoreTx();
   console.log(`✅ DB 복원 완료:`, result);
   res.json({ success: true, restored: result });
+}));
+
+// ── 관리자: DB 전체 초기화 후 seed_data.json으로 재구성 ──────────
+// POST /api/admin/reset-from-seed  { secret: "DS2024" }
+app.post('/api/admin/reset-from-seed', wrap((req, res) => {
+  const { secret } = req.body;
+  if (secret !== 'DS2024') return res.status(403).json({ success: false, error: '권한 없음' });
+
+  try {
+    // 1. 현장/승강기 전체 삭제 (CASCADE로 연관 데이터도 삭제)
+    db.prepare('DELETE FROM monthly_checks').run();
+    db.prepare('DELETE FROM quarterly_checks').run();
+    db.prepare('DELETE FROM inspection_issues').run();
+    db.prepare('DELETE FROM inspections').run();
+    db.prepare('DELETE FROM elevators').run();
+    db.prepare('DELETE FROM sites').run();
+    // AUTOINCREMENT 리셋
+    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('sites','elevators','inspections','inspection_issues','monthly_checks','quarterly_checks')").run();
+
+    console.log('🗑️ DB 초기화 완료 - seed_data.json으로 재구성 시작');
+
+    // 2. seed_data.json 다시 로드 (최신)
+    let seed = { sites: [], elevators: [] };
+    if (fs.existsSync(SEED_FILE)) {
+      seed = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8'));
+    }
+
+    // 3. autoRestoreFromSeed 실행
+    SEED_DATA = seed;
+    autoRestoreFromSeed();
+
+    const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
+    const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
+    res.json({ success: true, sites: total, elevators: elevTotal, message: 'seed_data.json으로 완전 재구성 완료' });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+}));
+
+// ── 관리자: 중복 현장 정리 ────────────────────────────────────────
+// POST /api/admin/dedup  { secret: "DS2024" }
+app.post('/api/admin/dedup', wrap((req, res) => {
+  const { secret } = req.body;
+  if (secret !== 'DS2024') return res.status(403).json({ success: false, error: '권한 없음' });
+
+  try {
+    // site_name 기준으로 중복 제거 (가장 작은 id만 보존)
+    const dupes = db.prepare(`
+      SELECT site_name, MIN(id) as keep_id, COUNT(*) as cnt
+      FROM sites GROUP BY site_name HAVING cnt > 1
+    `).all();
+
+    let removed = 0;
+    for (const d of dupes) {
+      // 보존할 id 제외하고 삭제
+      const toDelete = db.prepare('SELECT id FROM sites WHERE site_name=? AND id != ?').all(d.site_name, d.keep_id);
+      for (const row of toDelete) {
+        db.prepare('DELETE FROM elevators WHERE site_id=?').run(row.id);
+        db.prepare('DELETE FROM sites WHERE id=?').run(row.id);
+        removed++;
+      }
+    }
+
+    const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
+    const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
+    console.log(`🧹 중복 현장 ${removed}개 제거 완료`);
+    res.json({ success: true, removed, sites: total, elevators: elevTotal });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 }));
 
 // ── 서버 시작 ──────────────────────────────────────────────────
