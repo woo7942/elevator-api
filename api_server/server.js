@@ -35,7 +35,7 @@ const DB_PATH = path.join(DATA_DIR, 'elevator.db');
 console.log(`📁 DB 경로: ${DB_PATH}`);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // seed_data.json 업로드 허용
 
 // ── DB 초기화 ─────────────────────────────────────────────────
 const db = new Database(DB_PATH);
@@ -502,8 +502,58 @@ function updateSeedFile() {
     fs.writeFileSync(SEED_FILE, JSON.stringify(seed, null, 2), 'utf8');
     SEED_DATA = seed; // 메모리도 갱신
     console.log(`💾 seed 저장: 현장${sitesClean.length} 승강기${elevsClean.length} 검사${inspsClean.length} 지적${issuesClean.length}`);
+
+    // ── GitHub에 seed_data.json 자동 push ─────────────────────
+    // 환경변수 GITHUB_TOKEN이 있으면 GitHub API로 seed_data.json 업데이트
+    pushSeedToGithub(seed).catch(e => console.error('GitHub push 실패:', e.message));
   } catch(e) {
     console.error('seed_data.json 갱신 실패:', e.message);
+  }
+}
+
+// ── GitHub API로 seed_data.json push ──────────────────────────
+async function pushSeedToGithub(seed) {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) { console.log('ℹ️ GITHUB_TOKEN 없음 - GitHub push 건너뜀'); return; }
+
+  const owner = 'woo7942';
+  const repo = 'elevator-api';
+  const filePath = 'seed_data.json';
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+
+  try {
+    // 현재 파일의 SHA 가져오기 (업데이트에 필요)
+    const getResp = await fetch(apiUrl, {
+      headers: { 'Authorization': `token ${token}`, 'User-Agent': 'elevator-server' }
+    });
+    const fileInfo = await getResp.json();
+    const sha = fileInfo.sha;
+
+    // 파일 업데이트
+    const content = Buffer.from(JSON.stringify(seed, null, 2), 'utf8').toString('base64');
+    const putResp = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'elevator-server'
+      },
+      body: JSON.stringify({
+        message: `auto: seed_data.json 실시간 업데이트 (현장${seed.sites.length}개)`,
+        content,
+        sha,
+        branch: 'main'
+      })
+    });
+
+    if (putResp.ok) {
+      console.log(`✅ GitHub seed_data.json push 완료`);
+    } else {
+      const err = await putResp.text();
+      console.error('GitHub push 오류:', err.slice(0,100));
+    }
+  } catch(e) {
+    console.error('GitHub API 호출 실패:', e.message);
   }
 }
 
@@ -1342,6 +1392,38 @@ app.post('/api/restore', wrap((req, res) => {
   restoreTx();
   console.log(`✅ DB 복원 완료:`, result);
   res.json({ success: true, restored: result });
+}));
+
+// ── 관리자: seed_data.json 직접 업로드 + 즉시 복원 ──────────────
+// POST /api/admin/upload-seed  { secret: "DS2024", seed: {...} }
+app.post('/api/admin/upload-seed', wrap((req, res) => {
+  const { secret, seed } = req.body;
+  if (secret !== 'DS2024') return res.status(403).json({ success: false, error: '권한 없음' });
+  if (!seed || !seed.sites) return res.status(400).json({ success: false, error: 'seed 데이터 없음' });
+
+  try {
+    // seed_data.json 파일로 저장
+    fs.writeFileSync(SEED_FILE, JSON.stringify(seed, null, 2), 'utf8');
+    SEED_DATA = seed;
+    console.log(`📥 seed 업로드: ${seed.sites.length}현장, ${seed.elevators.length}승강기`);
+
+    // DB 초기화 후 복원
+    db.prepare('DELETE FROM monthly_checks').run();
+    db.prepare('DELETE FROM quarterly_checks').run();
+    db.prepare('DELETE FROM inspection_issues').run();
+    db.prepare('DELETE FROM inspections').run();
+    db.prepare('DELETE FROM elevators').run();
+    db.prepare('DELETE FROM sites').run();
+    try { db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('sites','elevators','inspections','inspection_issues','monthly_checks','quarterly_checks')").run(); } catch(e){}
+
+    autoRestoreFromSeed();
+
+    const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
+    const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
+    res.json({ success: true, sites: total, elevators: elevTotal });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 }));
 
 // ── 관리자: DB 전체 초기화 후 seed_data.json으로 재구성 ──────────
