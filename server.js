@@ -491,7 +491,7 @@ function updateSeedFile() {
     })).filter(m => m.site_name);
 
     const seed = {
-      version: '2.7.0',
+      version: '2.8.0',
       updated_at: new Date().toISOString(),
       sites: sitesClean,
       elevators: elevsClean,
@@ -1268,14 +1268,14 @@ app.get('/api/version', (req, res) => {
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
   const sites = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
   const elevators = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
-  res.json({ version: '2.7.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
+  res.json({ version: '2.8.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
 });
 
 // ── DB 전체 백업 (JSON) ─────────────────────────────────────────
 // GET /api/backup → 전체 DB를 JSON으로 반환 (앱에서 로컬 저장 가능)
 app.get('/api/backup', wrap((req, res) => {
   const data = {
-    version: '2.7.0',
+    version: '2.8.0',
     timestamp: new Date().toISOString(),
     sites: db.prepare('SELECT * FROM sites').all(),
     elevators: db.prepare('SELECT * FROM elevators').all(),
@@ -1491,6 +1491,104 @@ app.post('/api/admin/dedup', wrap((req, res) => {
     const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
     console.log(`🧹 중복 현장 ${removed}개 제거 완료`);
     res.json({ success: true, removed, sites: total, elevators: elevTotal });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+}));
+
+// ── 관리자: 수동 seed 저장 (영구저장 버튼) ────────────────────────
+// POST /api/admin/save-seed  { secret: "DS2024" }
+// 현재 DB 전체를 seed_data.json에 저장 + GitHub에 push (GITHUB_TOKEN 있으면)
+app.post('/api/admin/save-seed', wrap(async (req, res) => {
+  const { secret } = req.body || {};
+  if (secret !== 'DS2024') return res.status(403).json({ success: false, error: '권한 없음' });
+
+  try {
+    // updateSeedFile()을 동기적으로 실행 후 결과 반환
+    const sites = db.prepare('SELECT * FROM sites').all();
+    const elevators = db.prepare('SELECT * FROM elevators').all();
+    const inspections = db.prepare('SELECT * FROM inspections').all();
+    const issues = db.prepare('SELECT * FROM inspection_issues').all();
+    const monthly = db.prepare('SELECT * FROM monthly_checks').all();
+
+    const siteIdToName = {};
+    for (const s of sites) siteIdToName[s.id] = s.site_name;
+    const elevIdToNo = {};
+    for (const e of elevators) elevIdToNo[e.id] = e.elevator_no;
+
+    const sitesClean = sites.map(s => ({
+      site_name: s.site_name, address: s.address||'', owner_name: s.owner_name||null,
+      owner_phone: s.owner_phone||null, manager_name: s.manager_name||null,
+      team: s.team||'', total_elevators: s.total_elevators||0, status: s.status||'active',
+      contract_start: s.contract_start||null, contract_end: s.contract_end||null, notes: s.notes||null,
+    }));
+
+    const elevsClean = elevators.map(e => ({
+      site_name: siteIdToName[e.site_id]||'', elevator_no: e.elevator_no||'',
+      elevator_name: e.elevator_name||'', elevator_type: e.elevator_type||'승객용',
+      manufacturer: e.manufacturer||null, manufacture_year: e.manufacture_year||null,
+      install_date: e.install_date||null, floors_served: e.floors_served||null,
+      capacity: e.capacity||null, load_capacity: e.load_capacity||null,
+      speed: e.speed||null, status: e.status||'normal', notes: e.notes||null,
+    })).filter(e => e.site_name);
+
+    const inspsClean = inspections.map(i => ({
+      site_name: siteIdToName[i.site_id]||'', elevator_no: elevIdToNo[i.elevator_id]||'',
+      inspection_type: i.inspection_type||'', inspection_date: i.inspection_date||null,
+      next_inspection_date: i.next_inspection_date||null, inspector_name: i.inspector_name||null,
+      inspection_agency: i.inspection_agency||null, result: i.result||'합격',
+      report_no: i.report_no||null, notes: i.notes||null,
+    })).filter(i => i.site_name);
+
+    const issuesClean = issues.map(iss => {
+      const insp = inspections.find(i => i.id === iss.inspection_id);
+      return {
+        site_name: insp ? (siteIdToName[insp.site_id]||'') : '',
+        elevator_no: insp ? (elevIdToNo[insp.elevator_id]||'') : '',
+        inspection_date: insp ? insp.inspection_date : null,
+        issue_no: iss.issue_no||null, location: iss.location||null,
+        issue_content: iss.issue_content||null, action_required: iss.action_required||null,
+        action_deadline: iss.action_deadline||null, status: iss.status||'미조치',
+        resolved_date: iss.resolved_date||null, notes: iss.notes||null,
+      };
+    }).filter(i => i.site_name);
+
+    const monthlyClean = monthly.map(m => ({
+      site_name: siteIdToName[m.site_id]||'', elevator_no: elevIdToNo[m.elevator_id]||'',
+      check_year: m.check_year||null, check_month: m.check_month||null,
+      check_date: m.check_date||null, checker_name: m.checker_name||null,
+      status: m.status||'예정', notes: m.notes||null,
+    })).filter(m => m.site_name);
+
+    const seed = {
+      version: '2.8.0',
+      updated_at: new Date().toISOString(),
+      sites: sitesClean,
+      elevators: elevsClean,
+      inspections: inspsClean,
+      issues: issuesClean,
+      monthly: monthlyClean,
+    };
+
+    fs.writeFileSync(SEED_FILE, JSON.stringify(seed, null, 2), 'utf8');
+    SEED_DATA = seed;
+    console.log(`💾 [수동저장] seed: 현장${sitesClean.length} 승강기${elevsClean.length}`);
+
+    // GitHub push 시도
+    let githubStatus = 'skipped';
+    try {
+      await pushSeedToGithub(seed);
+      githubStatus = process.env.GITHUB_TOKEN ? 'pushed' : 'no_token';
+    } catch(e) {
+      githubStatus = 'failed: ' + e.message;
+    }
+
+    res.json({
+      success: true,
+      saved: { sites: sitesClean.length, elevators: elevsClean.length },
+      github: githubStatus,
+      message: `✅ 현장 ${sitesClean.length}개, 승강기 ${elevsClean.length}개 영구저장 완료`
+    });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
