@@ -1268,7 +1268,16 @@ app.get('/api/version', (req, res) => {
   const teams = db.prepare("SELECT COUNT(DISTINCT team) as cnt FROM sites WHERE team != '' AND team IS NOT NULL").get();
   const sites = db.prepare('SELECT COUNT(*) as cnt FROM sites').get();
   const elevators = db.prepare('SELECT COUNT(*) as cnt FROM elevators').get();
-  res.json({ version: '2.8.0', users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt, status: 'ok' });
+  res.json({
+    version: '2.8.0',
+    users: users.cnt, teams: teams.cnt, sites: sites.cnt, elevators: elevators.cnt,
+    status: 'ok',
+    seed_loaded: SEED_DATA.sites ? SEED_DATA.sites.length : 0,
+    seed_file: SEED_FILE,
+    seed_exists: fs.existsSync(SEED_FILE),
+    data_dir: DATA_DIR,
+    __dirname: __dirname,
+  });
 });
 
 // ── DB 전체 백업 (JSON) ─────────────────────────────────────────
