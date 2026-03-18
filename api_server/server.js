@@ -165,6 +165,30 @@ CREATE TABLE IF NOT EXISTS app_users (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS error_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  error_code TEXT NOT NULL,
+  manufacturer TEXT NOT NULL,
+  elevator_type TEXT DEFAULT '전체',
+  error_title TEXT NOT NULL,
+  error_description TEXT,
+  cause TEXT,
+  solution TEXT,
+  severity TEXT DEFAULT '일반' CHECK(severity IN ('긴급','주의','일반')),
+  created_by TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS error_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  error_id INTEGER NOT NULL,
+  author TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (error_id) REFERENCES error_codes(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS quarterly_checks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   elevator_id INTEGER NOT NULL,
@@ -1563,6 +1587,113 @@ app.post('/api/admin/save-seed', wrap(async (req, res) => {
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
+}));
+
+// ══════════════════════════════════════════════════════════════
+// 에러코드 검색 API
+// ══════════════════════════════════════════════════════════════
+
+// GET /api/error-codes?q=검색어&manufacturer=제조사&severity=긴급
+app.get('/api/error-codes', wrap((req, res) => {
+  const { q, manufacturer, severity, elevator_type } = req.query;
+  let sql = `SELECT * FROM error_codes WHERE 1=1`;
+  const params = [];
+  if (q) {
+    sql += ` AND (error_code LIKE ? OR error_title LIKE ? OR error_description LIKE ? OR cause LIKE ? OR solution LIKE ?)`;
+    const like = `%${q}%`;
+    params.push(like, like, like, like, like);
+  }
+  if (manufacturer) { sql += ` AND manufacturer = ?`; params.push(manufacturer); }
+  if (severity)     { sql += ` AND severity = ?`;     params.push(severity); }
+  if (elevator_type && elevator_type !== '전체') {
+    sql += ` AND (elevator_type = ? OR elevator_type = '전체')`; params.push(elevator_type);
+  }
+  sql += ` ORDER BY manufacturer, error_code`;
+  const rows = db.prepare(sql).all(...params);
+  res.json({ success: true, results: rows });
+}));
+
+// GET /api/error-codes/:id (단일 + 댓글 포함)
+app.get('/api/error-codes/:id', wrap((req, res) => {
+  const row = db.prepare('SELECT * FROM error_codes WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: '에러코드를 찾을 수 없습니다.' });
+  const comments = db.prepare('SELECT * FROM error_comments WHERE error_id=? ORDER BY created_at').all(req.params.id);
+  res.json({ success: true, data: { ...row, comments } });
+}));
+
+// POST /api/error-codes (관리자만 - 헤더로 role 확인)
+app.post('/api/error-codes', wrap((req, res) => {
+  const { error_code, manufacturer, elevator_type, error_title, error_description, cause, solution, severity, created_by } = req.body;
+  if (!error_code || !manufacturer || !error_title) {
+    return res.status(400).json({ success: false, error: '에러코드, 제조사, 제목은 필수입니다.' });
+  }
+  const result = db.prepare(`
+    INSERT INTO error_codes (error_code, manufacturer, elevator_type, error_title, error_description, cause, solution, severity, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    error_code.trim(), manufacturer.trim(),
+    elevator_type || '전체', error_title.trim(),
+    error_description || null, cause || null,
+    solution || null, severity || '일반', created_by || null
+  );
+  const created = db.prepare('SELECT * FROM error_codes WHERE id=?').get(result.lastInsertRowid);
+  res.status(201).json({ success: true, data: created });
+}));
+
+// PUT /api/error-codes/:id (관리자만)
+app.put('/api/error-codes/:id', wrap((req, res) => {
+  const row = db.prepare('SELECT id FROM error_codes WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: '에러코드를 찾을 수 없습니다.' });
+  const { error_code, manufacturer, elevator_type, error_title, error_description, cause, solution, severity } = req.body;
+  db.prepare(`
+    UPDATE error_codes SET error_code=?, manufacturer=?, elevator_type=?, error_title=?,
+    error_description=?, cause=?, solution=?, severity=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+  `).run(
+    error_code, manufacturer, elevator_type || '전체', error_title,
+    error_description || null, cause || null, solution || null, severity || '일반',
+    req.params.id
+  );
+  const updated = db.prepare('SELECT * FROM error_codes WHERE id=?').get(req.params.id);
+  res.json({ success: true, data: updated });
+}));
+
+// DELETE /api/error-codes/:id (관리자만)
+app.delete('/api/error-codes/:id', wrap((req, res) => {
+  const row = db.prepare('SELECT id FROM error_codes WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: '에러코드를 찾을 수 없습니다.' });
+  db.prepare('DELETE FROM error_codes WHERE id=?').run(req.params.id);
+  res.json({ success: true, message: '삭제되었습니다.' });
+}));
+
+// ── 댓글 API ──────────────────────────────────────────────────
+
+// GET /api/error-codes/:id/comments
+app.get('/api/error-codes/:id/comments', wrap((req, res) => {
+  const comments = db.prepare('SELECT * FROM error_comments WHERE error_id=? ORDER BY created_at').all(req.params.id);
+  res.json({ success: true, results: comments });
+}));
+
+// POST /api/error-codes/:id/comments (관리자만)
+app.post('/api/error-codes/:id/comments', wrap((req, res) => {
+  const { author, content } = req.body;
+  if (!content || !author) return res.status(400).json({ success: false, error: '작성자와 내용은 필수입니다.' });
+  const errRow = db.prepare('SELECT id FROM error_codes WHERE id=?').get(req.params.id);
+  if (!errRow) return res.status(404).json({ success: false, error: '에러코드를 찾을 수 없습니다.' });
+  const result = db.prepare('INSERT INTO error_comments (error_id, author, content) VALUES (?, ?, ?)').run(req.params.id, author.trim(), content.trim());
+  const created = db.prepare('SELECT * FROM error_comments WHERE id=?').get(result.lastInsertRowid);
+  res.status(201).json({ success: true, data: created });
+}));
+
+// DELETE /api/error-codes/:errorId/comments/:commentId (관리자만)
+app.delete('/api/error-codes/:errorId/comments/:commentId', wrap((req, res) => {
+  db.prepare('DELETE FROM error_comments WHERE id=? AND error_id=?').run(req.params.commentId, req.params.errorId);
+  res.json({ success: true, message: '댓글이 삭제되었습니다.' });
+}));
+
+// GET /api/error-codes/manufacturers (제조사 목록)
+app.get('/api/error-manufacturers', wrap((req, res) => {
+  const rows = db.prepare('SELECT DISTINCT manufacturer FROM error_codes ORDER BY manufacturer').all();
+  res.json({ success: true, results: rows.map(r => r.manufacturer) });
 }));
 
 // ── 서버 시작 ──────────────────────────────────────────────────
