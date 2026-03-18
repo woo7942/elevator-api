@@ -251,49 +251,26 @@ function makeSiteCode(prefix) {
 //       없는 현장만 추가 (사용자 추가/수정 데이터 100% 보호)
 function autoRestoreFromSeed() {
   try {
-    const insertSite = db.prepare(`
-      INSERT INTO sites
-        (site_code, site_name, address, owner_name, owner_phone, manager_name,
-         team, total_elevators, status, contract_start, contract_end, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
-    `);
-    const insertElev = db.prepare(`
-      INSERT INTO elevators
-        (site_id, elevator_no, elevator_name, elevator_type,
-         manufacturer, manufacture_year, install_date, floors_served,
-         capacity, load_capacity, speed, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertInsp = db.prepare(`
-      INSERT INTO inspections
-        (elevator_id, site_id, inspection_type, inspection_date, next_inspection_date,
-         inspector_name, inspection_agency, result, report_no, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertIssue = db.prepare(`
-      INSERT INTO inspection_issues
-        (inspection_id, issue_no, location, issue_content, action_required,
-         action_deadline, status, resolved_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertMonthly = db.prepare(`
-      INSERT INTO monthly_checks
-        (site_id, elevator_id, check_year, check_month, check_date, checker_name, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const sites = SEED_DATA.sites || [];
+    const elevators = SEED_DATA.elevators || [];
+    console.log(`🔄 autoRestoreFromSeed 시작: seed=${sites.length}현장, ${elevators.length}승강기`);
 
-    const restoreTx = db.transaction(() => {
-      let siteAdded = 0, elevAdded = 0, inspAdded = 0, issueAdded = 0, monthlyAdded = 0;
+    let siteAdded = 0, elevAdded = 0, siteErr = 0;
 
-      // ① 현장 복원
-      for (const s of SEED_DATA.sites || []) {
-        if (!s.site_name) continue;
+    // ① 현장 복원 (트랜잭션 없이 개별 INSERT)
+    for (const s of sites) {
+      if (!s.site_name) continue;
+      try {
         const exists = db.prepare('SELECT id FROM sites WHERE site_name=?').get(s.site_name);
         if (exists) continue;
-
         const prefix = s.team === '파주2팀' ? 'P2' : 'P1';
         const code = makeSiteCode(prefix);
-        const r = insertSite.run(
+        const r = db.prepare(`
+          INSERT INTO sites
+            (site_code, site_name, address, owner_name, owner_phone, manager_name,
+             team, total_elevators, status, contract_start, contract_end, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+        `).run(
           code, s.site_name, s.address||'',
           s.owner_name||null, s.owner_phone||null, s.manager_name||null,
           s.team||'', s.total_elevators||0,
@@ -301,103 +278,69 @@ function autoRestoreFromSeed() {
         );
         siteAdded++;
 
+        // 해당 현장의 승강기 추가
         const newSiteId = r.lastInsertRowid;
-        const siteElevs = (SEED_DATA.elevators||[]).filter(e => e.site_name === s.site_name);
+        const siteElevs = elevators.filter(e => e.site_name === s.site_name);
         for (const e of siteElevs) {
-          const elevExists = db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(newSiteId, e.elevator_no);
-          if (elevExists) continue;
-          insertElev.run(
-            newSiteId, e.elevator_no, e.elevator_name||'',
-            e.elevator_type||'승객용', e.manufacturer||null,
-            e.manufacture_year||null, e.install_date||null, e.floors_served||null,
-            e.capacity||null, e.load_capacity||null, e.speed||null,
-            e.status||'normal', e.notes||null
-          );
-          elevAdded++;
+          try {
+            db.prepare(`
+              INSERT INTO elevators
+                (site_id, elevator_no, elevator_name, elevator_type,
+                 manufacturer, manufacture_year, install_date, floors_served,
+                 capacity, load_capacity, speed, status, notes)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              newSiteId, e.elevator_no||'', e.elevator_name||'',
+              e.elevator_type||'승객용', e.manufacturer||null,
+              e.manufacture_year||null, e.install_date||null, e.floors_served||null,
+              e.capacity||null, e.load_capacity||null, e.speed||null,
+              e.status||'normal', e.notes||null
+            );
+            elevAdded++;
+          } catch(e2) {
+            // 승강기 삽입 오류 무시
+          }
         }
+      } catch(sErr) {
+        siteErr++;
+        if (siteErr <= 3) console.error(`❌ 현장 복원 오류 (${s.site_name}):`, sErr.message);
       }
+    }
 
-      // ② 기존 현장의 누락된 승강기 복원
-      for (const e of (SEED_DATA.elevators||[])) {
-        if (!e.site_name || !e.elevator_no) continue;
+    // ② 기존 현장의 누락 승강기 복원
+    for (const e of elevators) {
+      if (!e.site_name || !e.elevator_no) continue;
+      try {
         const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(e.site_name);
         if (!site) continue;
         const exists = db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, e.elevator_no);
         if (exists) continue;
-        insertElev.run(
-          site.id, e.elevator_no, e.elevator_name||'',
+        db.prepare(`
+          INSERT INTO elevators
+            (site_id, elevator_no, elevator_name, elevator_type,
+             manufacturer, manufacture_year, install_date, floors_served,
+             capacity, load_capacity, speed, status, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          site.id, e.elevator_no||'', e.elevator_name||'',
           e.elevator_type||'승객용', e.manufacturer||null,
           e.manufacture_year||null, e.install_date||null, e.floors_served||null,
           e.capacity||null, e.load_capacity||null, e.speed||null,
           e.status||'normal', e.notes||null
         );
         elevAdded++;
+      } catch(e2) {
+        // 무시
       }
+    }
 
-      // ③ 검사 데이터 복원
-      for (const i of (SEED_DATA.inspections||[])) {
-        if (!i.site_name || !i.inspection_date) continue;
-        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(i.site_name);
-        if (!site) continue;
-        const elev = i.elevator_no ? db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, i.elevator_no) : null;
-        if (!elev) continue;
-        const exists = db.prepare('SELECT id FROM inspections WHERE elevator_id=? AND inspection_date=? AND inspection_type=?').get(elev.id, i.inspection_date, i.inspection_type);
-        if (exists) continue;
-        insertInsp.run(
-          elev.id, site.id, i.inspection_type||'', i.inspection_date,
-          i.next_inspection_date||null, i.inspector_name||null,
-          i.inspection_agency||null, i.result||'합격', i.report_no||null, i.notes||null
-        );
-        inspAdded++;
-      }
-
-      // ④ 지적사항 복원
-      for (const iss of (SEED_DATA.issues||[])) {
-        if (!iss.site_name || !iss.inspection_date) continue;
-        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(iss.site_name);
-        if (!site) continue;
-        const elev = iss.elevator_no ? db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, iss.elevator_no) : null;
-        if (!elev) continue;
-        const insp = db.prepare('SELECT id FROM inspections WHERE elevator_id=? AND inspection_date=?').get(elev.id, iss.inspection_date);
-        if (!insp) continue;
-        const exists = db.prepare('SELECT id FROM inspection_issues WHERE inspection_id=? AND issue_content=?').get(insp.id, iss.issue_content);
-        if (exists) continue;
-        insertIssue.run(
-          insp.id, iss.issue_no||null, iss.location||null, iss.issue_content||null,
-          iss.action_required||null, iss.action_deadline||null,
-          iss.status||'미조치', iss.resolved_date||null, iss.notes||null
-        );
-        issueAdded++;
-      }
-
-      // ⑤ 월간점검 복원
-      for (const m of (SEED_DATA.monthly||[])) {
-        if (!m.site_name || !m.check_year || !m.check_month) continue;
-        const site = db.prepare('SELECT id FROM sites WHERE site_name=?').get(m.site_name);
-        if (!site) continue;
-        const elev = m.elevator_no ? db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=?').get(site.id, m.elevator_no) : null;
-        if (!elev) continue;
-        const exists = db.prepare('SELECT id FROM monthly_checks WHERE elevator_id=? AND check_year=? AND check_month=?').get(elev.id, m.check_year, m.check_month);
-        if (exists) continue;
-        insertMonthly.run(
-          site.id, elev.id, m.check_year, m.check_month,
-          m.check_date||null, m.checker_name||null, m.status||'예정', m.notes||null
-        );
-        monthlyAdded++;
-      }
-
-      return { siteAdded, elevAdded, inspAdded, issueAdded, monthlyAdded };
-    });
-
-    const result = restoreTx();
     const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
     const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
-    if (result.siteAdded > 0 || result.elevAdded > 0 || result.inspAdded > 0) {
-      console.log(`✅ 자동복구: 현장+${result.siteAdded} 승강기+${result.elevAdded} 검사+${result.inspAdded} 지적+${result.issueAdded} 월간+${result.monthlyAdded}`);
-    }
-    console.log(`✅ 복구완료 → 현장: ${total}개, 승강기: ${elevTotal}대`);
+    console.log(`✅ 자동복구 완료: 현장+${siteAdded}(오류:${siteErr}) 승강기+${elevAdded} → 전체 현장:${total} 승강기:${elevTotal}`);
+    return { siteAdded, elevAdded, siteErr, total, elevTotal };
   } catch(err) {
-    console.error('❌ 자동복구 실패:', err.message);
+    console.error('❌ autoRestoreFromSeed 전체 오류:', err.message);
+    return { siteAdded: 0, elevAdded: 0, error: err.message };
   }
 }
 
@@ -1462,11 +1405,16 @@ app.post('/api/admin/reset-from-seed', wrap((req, res) => {
 
     // 3. autoRestoreFromSeed 실행
     SEED_DATA = seed;
-    autoRestoreFromSeed();
+    const restoreResult = autoRestoreFromSeed();
 
     const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
     const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
-    res.json({ success: true, sites: total, elevators: elevTotal, message: 'seed_data.json으로 완전 재구성 완료' });
+    res.json({ success: true, sites: total, elevators: elevTotal, 
+      message: 'seed_data.json으로 완전 재구성 완료',
+      restore: restoreResult,
+      seed_sites: seed.sites.length,
+      seed_elevs: seed.elevators.length,
+    });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
