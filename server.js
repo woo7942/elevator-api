@@ -1427,27 +1427,41 @@ app.post('/api/admin/dedup', wrap((req, res) => {
   if (secret !== 'DS2024') return res.status(403).json({ success: false, error: '권한 없음' });
 
   try {
-    // site_name 기준으로 중복 제거 (가장 작은 id만 보존)
-    const dupes = db.prepare(`
+    // 1. 현장 중복 제거 (site_name 기준, 가장 작은 id 보존)
+    const dupeSites = db.prepare(`
       SELECT site_name, MIN(id) as keep_id, COUNT(*) as cnt
       FROM sites GROUP BY site_name HAVING cnt > 1
     `).all();
 
-    let removed = 0;
-    for (const d of dupes) {
-      // 보존할 id 제외하고 삭제
+    let removedSites = 0;
+    for (const d of dupeSites) {
       const toDelete = db.prepare('SELECT id FROM sites WHERE site_name=? AND id != ?').all(d.site_name, d.keep_id);
       for (const row of toDelete) {
         db.prepare('DELETE FROM elevators WHERE site_id=?').run(row.id);
         db.prepare('DELETE FROM sites WHERE id=?').run(row.id);
-        removed++;
+        removedSites++;
+      }
+    }
+
+    // 2. 승강기 중복 제거 (site_id + elevator_no 기준, 가장 작은 id 보존)
+    const dupeElevs = db.prepare(`
+      SELECT site_id, elevator_no, MIN(id) as keep_id, COUNT(*) as cnt
+      FROM elevators GROUP BY site_id, elevator_no HAVING cnt > 1
+    `).all();
+
+    let removedElevs = 0;
+    for (const d of dupeElevs) {
+      const toDelete = db.prepare('SELECT id FROM elevators WHERE site_id=? AND elevator_no=? AND id != ?').all(d.site_id, d.elevator_no, d.keep_id);
+      for (const row of toDelete) {
+        db.prepare('DELETE FROM elevators WHERE id=?').run(row.id);
+        removedElevs++;
       }
     }
 
     const total = db.prepare('SELECT COUNT(*) as c FROM sites').get().c;
     const elevTotal = db.prepare('SELECT COUNT(*) as c FROM elevators').get().c;
-    console.log(`🧹 중복 현장 ${removed}개 제거 완료`);
-    res.json({ success: true, removed, sites: total, elevators: elevTotal });
+    console.log(`🧹 중복 제거: 현장 ${removedSites}개, 승강기 ${removedElevs}개`);
+    res.json({ success: true, removed_sites: removedSites, removed_elevators: removedElevs, sites: total, elevators: elevTotal });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
